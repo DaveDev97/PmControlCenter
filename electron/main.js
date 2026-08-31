@@ -39,7 +39,7 @@ function createWindow() {
   // The backend serves the built SPA same-origin, so we load it over HTTP
   // (not file://): this avoids CORS/preflight 405s and fixes absolute asset
   // paths like /logo.svg. In dev, ELECTRON_START_URL points at the Vite server.
-  const startUrl = process.env.ELECTRON_START_URL || backend.API_BASE;
+  const startUrl = process.env.ELECTRON_START_URL || backend.apiBase();
   mainWindow.loadURL(startUrl);
   if (process.env.ELECTRON_START_URL) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
@@ -91,7 +91,7 @@ function setupAutoUpdater() {
 }
 
 app.whenReady().then(async () => {
-  backend.start(app, backendLogStream());
+  await backend.start(app, backendLogStream());
   try {
     await backend.waitUntilReady();
   } catch (e) {

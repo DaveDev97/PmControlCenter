@@ -1,7 +1,7 @@
 {
   "name": "pm-control-center",
   "productName": "PM Control Center",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Desktop app for project, resource and opportunity control — reads data from shared Excel files.",
   "author": "Security Account Management Team",
   "license": "MIT",

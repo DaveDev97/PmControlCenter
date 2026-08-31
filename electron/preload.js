@@ -3,10 +3,9 @@
 // contextIsolation is enabled, so the renderer only sees the whitelisted API.
 const { contextBridge, ipcRenderer } = require("electron");
 
-const API_BASE = process.env.PMCC_API_BASE || "http://127.0.0.1:8000";
-
-// The frontend API client reads window.__API_BASE__ to target the backend.
-contextBridge.exposeInMainWorld("__API_BASE__", API_BASE);
+// NOTE: we intentionally do NOT expose a fixed __API_BASE__. The SPA is served
+// same-origin by the backend on a runtime-chosen port, so the frontend uses
+// relative "/api/..." requests that always hit the correct backend.
 
 contextBridge.exposeInMainWorld("electronAPI", {
   /** Open the native directory picker; resolves to the chosen path or null. */
