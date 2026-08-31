@@ -20,8 +20,8 @@ import {
   type ConfigureResult,
 } from "../lib/settings";
 
-const REQUIRED = ["contracts_financials.xlsx", "allocations.xlsx"];
-const OPTIONAL = ["opportunities.xlsx"];
+const REQUIRED = ["security_financials.xlsx"];
+const OPTIONAL: string[] = [];
 
 type Step = 0 | 1 | 2 | 3;
 

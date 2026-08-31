@@ -1,488 +1,256 @@
-"""
-Generate anonymized Excel files for demo/testing purposes.
+"""Structure-preserving anonymizer for the PM Control Center data workbook.
 
-Reads from ../backend/app/seed.py data structure and creates:
-- contracts_financials.xlsx
-- allocations.xlsx
-- opportunities.xlsx
+Produces an anonymized clone of the real ``BNL_Security_Financials_v02.xlsx``
+that keeps **exactly the same structure and shape** (all sheets, layout,
+headers, column positions) while replacing only the sensitive *values*:
 
-All data is anonymized (fake names, companies, amounts scaled randomly).
+* person names (``paolo.zinzi`` ...)               -> consistent fake dotted names
+* commercial contact names (``Ref Name`` column)   -> consistent fake full names
+* client / legal-entity tokens (BNL, Findomestic…) -> consistent fake brands
+* identifiers (Opp ID, ODA, CCP, WBS, contract #)  -> consistent fake codes
+* monetary amounts                                 -> scaled by a single global
+  factor (keeps every ratio/aggregation internally consistent, e.g. CCI %)
+
+Formulas are frozen to their (anonymized) cached values so the sample never
+leaks a real figure through a stale cache and reads identically via pandas.
+
+Usage:
+    python scripts/anonymize_data.py [SOURCE.xlsx] [OUTPUT.xlsx]
+Defaults: source = ../BNL_Security_Financials_v02.xlsx, output = sample_data/security_financials.xlsx
 """
+from __future__ import annotations
+
 import random
-from datetime import date, datetime
+import re
+import sys
 from pathlib import Path
 
-import pandas as pd
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils.dataframe import dataframe_to_rows
+import openpyxl
 
+# Deterministic output.
+RNG = random.Random(20260831)
 
-# Fake names pools
+SCRIPT_DIR = Path(__file__).resolve().parent
+EXPORT_DIR = SCRIPT_DIR.parent
+DEFAULT_SOURCE = EXPORT_DIR.parent / "BNL_Security_Financials_v02.xlsx"
+DEFAULT_OUTPUT = EXPORT_DIR / "sample_data" / "security_financials.xlsx"
+
+# Single global scale factor for every monetary amount (keeps ratios intact).
+AMOUNT_SCALE = 0.8137
+
+# --- Fake value pools -------------------------------------------------------
 FIRST_NAMES = [
-    "Manager", "Senior Consultant", "Consultant", "Analyst", "Lead",
-    "Director", "Specialist", "Coordinator", "Architect", "Engineer"
+    "marco", "luca", "giulia", "sara", "andrea", "chiara", "matteo", "elena",
+    "davide", "laura", "simone", "martina", "alberto", "federica", "stefano",
+    "valentina", "roberto", "silvia", "antonio", "francesca", "paolo", "anna",
+    "giorgio", "elisa", "riccardo", "beatrice", "fabio", "ilaria", "nicola",
+    "serena",
 ]
-
-SUFFIXES = ["A", "B", "C", "D", "E", "F", "1", "2", "3", "4"]
-
-CLIENTS = [
-    "Alpha Corp", "Beta Industries", "Gamma Ltd", "Delta Group",
-    "Epsilon Holdings", "Zeta Partners", "Theta Solutions", "Iota Ventures"
+LAST_NAMES = [
+    "rossi", "bianchi", "ferrari", "russo", "romano", "gallo", "costa", "conti",
+    "esposito", "ricci", "bruno", "greco", "marino", "rizzo", "moretti",
+    "barbieri", "fontana", "santoro", "mariani", "rinaldi", "caruso", "ferrara",
+    "colombo", "leone", "longo", "gentile", "martini", "vitale", "serra",
+    "villa",
 ]
-
-LEGAL_ENTITIES = [
-    "Alpha Corp S.p.A.", "Beta Industries Ltd.", "Gamma Group Inc.",
-    "Delta Holdings S.p.A.", "Epsilon Partners S.r.l."
-]
-
-SERVICE_TYPES = [
-    "Security Services", "Cloud Security", "SOC Operations",
-    "Vulnerability Management", "IAM Services", "Data Protection",
-    "Threat Intelligence", "Security Consulting"
-]
-
-# Output folder
-OUTPUT_DIR = Path(__file__).parent.parent / "sample_data"
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-
-def random_scale(value: float, min_factor=0.7, max_factor=1.3) -> float:
-    """Scale amount randomly to anonymize."""
-    return round(value * random.uniform(min_factor, max_factor), 2)
-
-
-def generate_resources(count=20) -> pd.DataFrame:
-    """Generate fake resources."""
-    resources = []
-
-    roles_pool = [
-        ("Manager", 800.0),
-        ("Senior Consultant", 450.0),
-        ("Consultant", 350.0),
-        ("Analyst", 280.0),
-    ]
-
-    for i in range(count):
-        role_idx = i % len(roles_pool)
-        role, base_rate = roles_pool[role_idx]
-
-        name = f"{role} {SUFFIXES[i % len(SUFFIXES)]}"
-        email = f"{name.lower().replace(' ', '.')}@company.com"
-
-        resources.append({
-            "name": name,
-            "email": email,
-            "role": role,
-            "daily_rate": round(base_rate * random.uniform(0.9, 1.1), 2),
-            "loaded_cost_hourly": round(base_rate / 8 * random.uniform(0.8, 1.0), 2),
-            "chargeability": round(random.uniform(0.70, 0.90), 2),
-            "status": "active",
-            "hire_date": date(2024 + random.randint(0, 2), random.randint(1, 12), 1)
-        })
-
-    return pd.DataFrame(resources)
-
-
-def generate_contracts(count=5) -> pd.DataFrame:
-    """Generate fake contracts."""
-    contracts = []
-
-    for i in range(count):
-        client = random.choice(CLIENTS)
-        service = random.choice(SERVICE_TYPES)
-
-        contracts.append({
-            "contract_id": f"PROJ-{str(i+1).zfill(3)}",
-            "client_name": client,
-            "contract_name": f"{client.split()[0]} - {service}",
-            "service_group": random.choice(["IMS", "AMS", "Security", "Consulting"]),
-            "wbs_l1": f"WBS{str(i+1).zfill(3)}",
-            "wbs_l2": f"SUB{str(i+1).zfill(3)}",
-            "description": f"Managed {service.lower()} for {client}",
-            "contract_type": random.choice(["T&M", "Fixed Price", "Capped T&M"]),
-            "fiscal_year": random.choice(["2025", "2026"]),
-            "start_date": date(2026, 1, 1),
-            "end_date": date(2026, 12, 31),
-            "initial_budget": random_scale(800000.0, 0.8, 1.5),
-            "status": "active"
-        })
-
-    return pd.DataFrame(contracts)
-
-
-def generate_financials(contracts: pd.DataFrame) -> pd.DataFrame:
-    """Generate monthly financials for each contract."""
-    financials = []
-
-    months = pd.date_range("2026-01-01", "2026-12-01", freq="MS")
-
-    for _, contract in contracts.iterrows():
-        budget = contract["initial_budget"]
-        monthly_target = budget / 12
-
-        for month in months:
-            # Actual months (Jan-Aug)
-            if month.month <= 8:
-                revenues_actual = random_scale(monthly_target, 0.7, 1.2)
-                costs_actual = revenues_actual * random.uniform(0.55, 0.75)  # 25-45% margin
-
-                financials.append({
-                    "contract_id": contract["contract_id"],
-                    "month": month.date(),
-                    "fiscal_quarter": f"Q{((month.month - 1) // 3) + 1}",
-                    "is_actual": True,
-                    "billings_actual": revenues_actual,
-                    "revenues_actual": revenues_actual,
-                    "payroll_costs_actual": costs_actual * 0.85,
-                    "non_payroll_costs_actual": costs_actual * 0.10,
-                    "capital_charges_actual": costs_actual * 0.05,
-                    "billings_forecast": 0.0,
-                    "revenues_forecast": 0.0,
-                    "payroll_costs_forecast": 0.0,
-                    "non_payroll_costs_forecast": 0.0,
-                    "capital_charges_forecast": 0.0
-                })
-            # Forecast months (Sep-Dec)
-            else:
-                revenues_forecast = random_scale(monthly_target, 0.8, 1.1)
-                costs_forecast = revenues_forecast * random.uniform(0.60, 0.70)
-
-                financials.append({
-                    "contract_id": contract["contract_id"],
-                    "month": month.date(),
-                    "fiscal_quarter": f"Q{((month.month - 1) // 3) + 1}",
-                    "is_actual": False,
-                    "billings_actual": 0.0,
-                    "revenues_actual": 0.0,
-                    "payroll_costs_actual": 0.0,
-                    "non_payroll_costs_actual": 0.0,
-                    "capital_charges_actual": 0.0,
-                    "billings_forecast": revenues_forecast,
-                    "revenues_forecast": revenues_forecast,
-                    "payroll_costs_forecast": costs_forecast * 0.85,
-                    "non_payroll_costs_forecast": costs_forecast * 0.10,
-                    "capital_charges_forecast": costs_forecast * 0.05
-                })
-
-    return pd.DataFrame(financials)
-
-
-def generate_allocations(resources: pd.DataFrame, contracts: pd.DataFrame) -> pd.DataFrame:
-    """Generate resource allocations."""
-    allocations = []
-
-    # Assegna ogni risorsa a 1-3 contratti
-    for _, resource in resources.iterrows():
-        num_contracts = random.randint(1, 3)
-        assigned_contracts = random.sample(list(contracts["contract_id"]), min(num_contracts, len(contracts)))
-
-        for contract_id in assigned_contracts:
-            utilization = round(random.uniform(0.4, 1.0), 2)
-            days_per_month = round(utilization * 22, 1)  # 22 giorni lavorativi/mese
-
-            allocations.append({
-                "resource_name": resource["name"],
-                "resource_email": resource["email"],
-                "contract_id": contract_id,
-                "utilization": utilization,
-                "days_per_month": days_per_month,
-                "start_date": date(2026, 1, 1),
-                "end_date": date(2026, 12, 31)
-            })
-
-    return pd.DataFrame(allocations)
-
-
-def generate_opportunities(contracts: pd.DataFrame) -> pd.DataFrame:
-    """Generate fake opportunities."""
-    opportunities = []
-
-    stages = ["Lead", "Qualified", "Proposal", "CloseWon"]
-
-    for i in range(10):
-        contract = random.choice(contracts["contract_id"].tolist())
-        client = contracts[contracts["contract_id"] == contract]["client_name"].iloc[0]
-        service = random.choice(SERVICE_TYPES)
-        stage = random.choice(stages)
-
-        opportunities.append({
-            "opp_id_mms": f"OPP-{str(i+1).zfill(4)}",
-            "contract_id": contract if stage == "CloseWon" else None,
-            "name": f"{client.split()[0]} {service}",
-            "description": f"New opportunity for {service.lower()} with {client}",
-            "legal_entity": random.choice(LEGAL_ENTITIES),
-            "fiscal_year": random.choice(["2026", "2027"]),
-            "close_date": date(2026, random.randint(9, 12), random.randint(1, 28)),
-            "quarter": random.choice(["Q3", "Q4"]),
-            "pds_status": random.choice(["Da inviare", "Inviata", "Approvata CVS"]),
-            "acn_tool_status": random.choice(["Todo", "In progress", "Done"]),
-            "mms_status": stage,
-            "stage": stage,
-            "estimated_value": random_scale(150000.0, 0.5, 2.0),
-            "probability": 1.0 if stage == "CloseWon" else (0.6 if stage == "Proposal" else 0.3),
-            "notes": None
-        })
-
-    return pd.DataFrame(opportunities)
-
-
-def style_excel_sheet(ws, df: pd.DataFrame, title: str):
-    """Apply styling to Excel sheet."""
-    # Header row
-    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF")
-
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    # Auto-width columns
-    for column in ws.columns:
-        max_length = 0
-        column = [cell for cell in column]
-        for cell in column:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(cell.value)
-            except:
-                pass
-        adjusted_width = (max_length + 2) * 1.2
-        ws.column_dimensions[column[0].column_letter].width = min(adjusted_width, 50)
-
-    # Freeze header
-    ws.freeze_panes = "A2"
-
-
-def create_contracts_financials_excel():
-    """Create contracts_financials.xlsx with 3 sheets."""
-    print("📊 Generating contracts_financials.xlsx...")
-
-    # Generate data
-    resources_df = generate_resources(20)
-    contracts_df = generate_contracts(5)
-    financials_df = generate_financials(contracts_df)
-
-    # Create Excel
-    wb = Workbook()
-    wb.remove(wb.active)  # Remove default sheet
-
-    # Sheet 1: Contracts
-    ws_contracts = wb.create_sheet("Contracts")
-    for row in dataframe_to_rows(contracts_df, index=False, header=True):
-        ws_contracts.append(row)
-    style_excel_sheet(ws_contracts, contracts_df, "Contracts")
-
-    # Sheet 2: Financials
-    ws_financials = wb.create_sheet("Financials")
-    for row in dataframe_to_rows(financials_df, index=False, header=True):
-        ws_financials.append(row)
-    style_excel_sheet(ws_financials, financials_df, "Financials")
-
-    # Sheet 3: Resources
-    ws_resources = wb.create_sheet("Resources")
-    for row in dataframe_to_rows(resources_df, index=False, header=True):
-        ws_resources.append(row)
-    style_excel_sheet(ws_resources, resources_df, "Resources")
-
-    # Save
-    output_path = OUTPUT_DIR / "contracts_financials.xlsx"
-    wb.save(output_path)
-    print(f"✅ Created: {output_path}")
-    print(f"   - {len(contracts_df)} contracts")
-    print(f"   - {len(financials_df)} financial records")
-    print(f"   - {len(resources_df)} resources")
-
-    return contracts_df, resources_df
-
-
-def create_allocations_excel(resources_df: pd.DataFrame, contracts_df: pd.DataFrame):
-    """Create allocations.xlsx."""
-    print("\n📊 Generating allocations.xlsx...")
-
-    allocations_df = generate_allocations(resources_df, contracts_df)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Allocations"
-
-    for row in dataframe_to_rows(allocations_df, index=False, header=True):
-        ws.append(row)
-
-    style_excel_sheet(ws, allocations_df, "Allocations")
-
-    output_path = OUTPUT_DIR / "allocations.xlsx"
-    wb.save(output_path)
-    print(f"✅ Created: {output_path}")
-    print(f"   - {len(allocations_df)} allocations")
-
-
-def create_opportunities_excel(contracts_df: pd.DataFrame):
-    """Create opportunities.xlsx."""
-    print("\n📊 Generating opportunities.xlsx...")
-
-    opportunities_df = generate_opportunities(contracts_df)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Opportunities"
-
-    for row in dataframe_to_rows(opportunities_df, index=False, header=True):
-        ws.append(row)
-
-    style_excel_sheet(ws, opportunities_df, "Opportunities")
-
-    output_path = OUTPUT_DIR / "opportunities.xlsx"
-    wb.save(output_path)
-    print(f"✅ Created: {output_path}")
-    print(f"   - {len(opportunities_df)} opportunities")
-
-
-def create_readme():
-    """Create README.md in sample_data folder."""
-    readme_content = """# Sample Data - Excel Schema
-
-Questi file Excel contengono dati **anonimizzati** per testing/demo dell'applicazione.
-
-## 📁 File Struttura
-
-### 1. contracts_financials.xlsx
-
-#### Sheet: Contracts
-| Colonna | Tipo | Descrizione | Esempio |
-|---------|------|-------------|---------|
-| contract_id | String | ID univoco contratto | PROJ-001 |
-| client_name | String | Nome cliente | Alpha Corp |
-| contract_name | String | Nome contratto | Alpha - Security Services |
-| service_group | String | Gruppo servizio | IMS, AMS, Security |
-| wbs_l1 | String | WBS livello 1 | WBS001 |
-| wbs_l2 | String | WBS livello 2 | SUB001 |
-| description | String | Descrizione | Managed security services... |
-| contract_type | String | Tipo | T&M, Fixed Price, Capped T&M |
-| fiscal_year | String | Anno fiscale | 2026 |
-| start_date | Date | Data inizio | 2026-01-01 |
-| end_date | Date | Data fine | 2026-12-31 |
-| initial_budget | Float | Budget iniziale (EUR) | 950000.00 |
-| status | String | Stato | active, closed |
-
-#### Sheet: Financials
-| Colonna | Tipo | Descrizione | Esempio |
-|---------|------|-------------|---------|
-| contract_id | String | Riferimento contratto | PROJ-001 |
-| month | Date | Mese (primo giorno) | 2026-01-01 |
-| fiscal_quarter | String | Quarter fiscale | Q1, Q2, Q3, Q4 |
-| is_actual | Boolean | Actual vs Forecast | TRUE, FALSE |
-| billings_actual | Float | Fatturato actual | 78000.00 |
-| revenues_actual | Float | Ricavi actual | 78000.00 |
-| payroll_costs_actual | Float | Costi personale actual | 52000.00 |
-| non_payroll_costs_actual | Float | Costi non personale actual | 3000.00 |
-| capital_charges_actual | Float | Ammortamenti actual | 2000.00 |
-| *_forecast | Float | Stesse colonne per forecast | ... |
-
-#### Sheet: Resources
-| Colonna | Tipo | Descrizione | Esempio |
-|---------|------|-------------|---------|
-| name | String | Nome risorsa | Manager A |
-| email | String | Email | manager.a@company.com |
-| role | String | Ruolo | Manager, Senior Consultant |
-| daily_rate | Float | Tariffa giornaliera | 800.00 |
-| loaded_cost_hourly | Float | Costo orario caricato | 95.00 |
-| chargeability | Float | Chargeability target | 0.85 |
-| status | String | Stato | active, inactive |
-| hire_date | Date | Data assunzione | 2024-01-01 |
-
----
-
-### 2. allocations.xlsx
-
-#### Sheet: Allocations
-| Colonna | Tipo | Descrizione | Esempio |
-|---------|------|-------------|---------|
-| resource_name | String | Nome risorsa | Manager A |
-| resource_email | String | Email risorsa | manager.a@company.com |
-| contract_id | String | ID contratto | PROJ-001 |
-| utilization | Float | Utilizzo (0-1) | 0.85 |
-| days_per_month | Float | Giorni/mese | 18.0 |
-| start_date | Date | Data inizio allocazione | 2026-01-01 |
-| end_date | Date | Data fine allocazione | 2026-12-31 |
-
----
-
-### 3. opportunities.xlsx
-
-#### Sheet: Opportunities
-| Colonna | Tipo | Descrizione | Esempio |
-|---------|------|-------------|---------|
-| opp_id_mms | String | ID opportunità MMS | OPP-0001 |
-| contract_id | String | Contratto collegato (se CloseWon) | PROJ-001 |
-| name | String | Nome opportunità | Alpha Security Extension |
-| description | String | Descrizione | Extension servizi SOC |
-| legal_entity | String | Legal entity cliente | Alpha Corp S.p.A. |
-| fiscal_year | String | Anno fiscale | 2026 |
-| close_date | Date | Data chiusura prevista | 2026-10-31 |
-| quarter | String | Quarter | Q1, Q2, Q3, Q4 |
-| pds_status | String | Status PDS | Da inviare, Inviata, Approvata CVS |
-| acn_tool_status | String | Status ACN Tool | Todo, In progress, Done |
-| mms_status | String | Status MMS | Lead, Qualified, Proposal, CloseWon |
-| stage | String | Stage opportunità | Lead, Qualified, Proposal, CloseWon |
-| estimated_value | Float | Valore stimato (EUR) | 120000.00 |
-| probability | Float | Probabilità (0-1) | 0.6 |
-| notes | String | Note (opzionale) | Follow-up Q3 |
-
----
-
-## 🔐 Anonimizzazione
-
-Questi dati sono **completamente fittizi**:
-
-- ✅ Nomi persone → "Manager A", "Senior Consultant 1"
-- ✅ Email → "role.suffix@company.com"
-- ✅ Clienti → "Alpha Corp", "Beta Industries"
-- ✅ Contratti → "PROJ-001", "PROJ-002"
-- ✅ Importi → scalati random (0.7x - 1.3x)
-
-**Nessun dato reale incluso.**
-
----
-
-## 🎯 Utilizzo
-
-1. **Setup Wizard**: Punta alla cartella `sample_data/`
-2. **App carica** i 3 Excel automaticamente
-3. **Dashboard popolate** con dati demo
-4. **Modifica DD/Overlay** → salvato in `pm_overlay.json`
-
----
-
-**Generato da:** `scripts/anonymize_data.py`
-**Data:** {datetime.now().strftime('%Y-%m-%d')}
-**Versione:** 1.0.0
-"""
-
-    readme_path = OUTPUT_DIR / "README.md"
-    readme_path.write_text(readme_content)
-    print(f"\n✅ Created: {readme_path}")
-
-
-def main():
-    """Generate all anonymized Excel files."""
-    print("="*60)
-    print("  PM Control Center - Data Anonymization")
-    print("="*60)
-
-    random.seed(42)  # Reproducible results
-
-    # Generate files
-    contracts_df, resources_df = create_contracts_financials_excel()
-    create_allocations_excel(resources_df, contracts_df)
-    create_opportunities_excel(contracts_df)
-    create_readme()
-
-    print("\n" + "="*60)
-    print("✅ All sample data files generated successfully!")
-    print(f"📁 Output folder: {OUTPUT_DIR}")
-    print("="*60)
+CLIENT_BRANDS = {
+    "BNL": "AlphaBank",
+    "Findomestic": "BetaCredit",
+    "Findo": "BetaCredit",
+    "Avanade": "GammaTech",
+    "Savoy": "DeltaCorp",
+    "Mooney": "EpsilonPay",
+    "EACB": "ZetaGroup",
+    "Worldline": "OmegaPay",
+}
+
+
+def _fake_dotted(rng: random.Random) -> str:
+    return f"{rng.choice(FIRST_NAMES)}.{rng.choice(LAST_NAMES)}"
+
+
+def _fake_fullname(rng: random.Random) -> str:
+    return f"{rng.choice(FIRST_NAMES).capitalize()} {rng.choice(LAST_NAMES).capitalize()}"
+
+
+# --- Regexes ----------------------------------------------------------------
+DOTTED_RE = re.compile(r"^[a-zà-ù]+\.[a-zà-ù.]+$", re.IGNORECASE)
+WBS_RE = re.compile(r"^[A-Z][A-Z0-9]{6,8}$")
+NUMID_RE = re.compile(r"^\d{5,11}$")           # Opp IDs, ODA, CCP (numeric, incl. leading zeros)
+CONTRACT_RE = re.compile(r"^994\d{7}$")         # 10-digit contract numbers
+# A plausible "Firstname Lastname" (Italian), 2-3 capitalized words.
+FULLNAME_RE = re.compile(r"^[A-ZÀ-Ù][a-zà-ù']{2,}(?: [A-ZÀ-Ù][a-zà-ù'\.]{1,}){1,2}$")
+# Words that look like a name but are actually labels -> never treat as names.
+NAME_STOPWORDS = {
+    "total", "revenue", "cost", "costs", "forecast", "actual", "before",
+    "close", "date", "quarter", "contract", "project", "amount", "billed",
+    "billings", "revenues", "payroll", "capital", "charges", "summary",
+    "available", "totals", "resource", "note", "notes", "cliente", "delta",
+    "consumato", "totale", "piano", "fatturazione", "final", "results",
+    # header words that must never be treated as person names
+    "ref", "name", "status", "code", "quarter", "billing", "stato", "tool",
+    "mmr", "mms", "oda", "pds", "wbs", "opp", "charg", "supporto", "security",
+    "studio", "delta", "sett", "otto", "add", "test", "governance",
+}
+
+
+class Anonymizer:
+    def __init__(self, rng: random.Random):
+        self.rng = rng
+        self.names: dict[str, str] = {}
+        self.fullnames: dict[str, str] = {}
+        self.wbs: dict[str, str] = {}
+        self.numids: dict[str, str] = {}
+        self.contracts: dict[str, str] = {}
+        self._used_dotted: set[str] = set()
+        self._used_full: set[str] = set()
+
+    # -- consistent generators --
+    def dotted(self, original: str) -> str:
+        key = original.lower()
+        if key not in self.names:
+            v = _fake_dotted(self.rng)
+            while v in self._used_dotted:
+                v = _fake_dotted(self.rng)
+            self._used_dotted.add(v)
+            self.names[key] = v
+        return self.names[key]
+
+    def fullname(self, original: str) -> str:
+        if original not in self.fullnames:
+            v = _fake_fullname(self.rng)
+            while v in self._used_full:
+                v = _fake_fullname(self.rng)
+            self._used_full.add(v)
+            self.fullnames[original] = v
+        return self.fullnames[original]
+
+    def wbs_code(self, original: str) -> str:
+        if original not in self.wbs:
+            first = original[0]
+            body = "".join(self.rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+                           for _ in range(len(original) - 4))
+            self.wbs[original] = f"{first}{body}001"
+        return self.wbs[original]
+
+    def numid(self, original: str) -> str:
+        if original not in self.numids:
+            n = len(original)
+            # keep same length; keep a leading zero if the original had one
+            digits = "".join(self.rng.choice("0123456789") for _ in range(n))
+            self.numids[original] = digits
+        return self.numids[original]
+
+    def contract(self, original: str) -> str:
+        if original not in self.contracts:
+            self.contracts[original] = "99" + "".join(
+                self.rng.choice("0123456789") for _ in range(8)
+            )
+        return self.contracts[original]
+
+    # -- cell transform --
+    def transform(self, value):
+        if isinstance(value, str):
+            return self._transform_str(value)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return self._transform_number(value)
+        return value
+
+    def anon_text(self, s: str) -> str:
+        """Replace embedded contract numbers and client tokens inside free text."""
+        out = re.sub(r"994\d{7}", lambda m: self.contract(m.group()), s)
+        for token, brand in CLIENT_BRANDS.items():
+            out = re.sub(re.escape(token), brand, out, flags=re.IGNORECASE)
+        return out
+
+    def _transform_str(self, s: str):
+        stripped = s.strip()
+        if not stripped:
+            return s
+        # Whole-cell identifiers (exact match) first.
+        if CONTRACT_RE.match(stripped):
+            return self.contract(stripped)
+        if DOTTED_RE.match(stripped):
+            return self.dotted(stripped)
+        if WBS_RE.match(stripped) and stripped != "FORECAST":
+            return self.wbs_code(stripped)
+        if NUMID_RE.match(stripped):
+            return self.numid(stripped)
+        # Embedded contract numbers / client tokens inside longer strings.
+        replaced = self.anon_text(s)
+        if replaced != s:
+            return replaced
+        # Standalone commercial contact full names.
+        if FULLNAME_RE.match(stripped):
+            words = stripped.lower().replace(".", " ").split()
+            if not any(w in NAME_STOPWORDS for w in words):
+                return self.fullname(stripped)
+        return s
+
+    def _transform_number(self, x):
+        # Leave quantities/ratios untouched: percentages (|x|<=1) and small
+        # integer counts (days/hours, 1..366). Long integers (>=10 digits) are
+        # identifiers -> map/scramble. Everything else (amounts, rates, and
+        # medium numeric ids like CCP) is scaled by one global factor, which
+        # both anonymizes it and keeps aggregations/ratios consistent.
+        if isinstance(x, bool):
+            return x
+        ax = abs(x)
+        if ax <= 1:
+            return x
+        is_int = float(x).is_integer()
+        if is_int and ax <= 366:
+            return x
+        if is_int and ax >= 1_000_000_000:  # long identifier (contract #, ODA…)
+            xs = str(int(x))
+            if CONTRACT_RE.match(xs):
+                return int(self.contract(xs))
+            return int(self.numid(xs))
+        scaled = x * AMOUNT_SCALE
+        return int(round(scaled)) if is_int else round(scaled, 2)
+
+
+def anonymize(source: Path, output: Path) -> dict:
+    wb = openpyxl.load_workbook(source, data_only=True)  # freeze formulas to values
+    anon = Anonymizer(RNG)
+    cells = 0
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value is None:
+                    continue
+                new = anon.transform(cell.value)
+                if new is not cell.value:
+                    cell.value = new
+                    cells += 1
+    # Anonymize sheet titles too (they embed contract numbers / client names).
+    for ws in wb.worksheets:
+        new_title = anon.anon_text(ws.title)[:31]
+        if new_title != ws.title and new_title not in wb.sheetnames:
+            ws.title = new_title
+    output.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(output)
+    return {
+        "sheets": len(wb.sheetnames),
+        "cells_changed": cells,
+        "names": len(anon.names),
+        "fullnames": len(anon.fullnames),
+        "wbs": len(anon.wbs),
+        "numids": len(anon.numids),
+        "contracts": len(anon.contracts),
+    }
+
+
+def main() -> None:
+    source = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SOURCE
+    output = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_OUTPUT
+    if not source.exists():
+        raise SystemExit(f"Source not found: {source}")
+    print(f"Anonymizing {source.name} -> {output}")
+    stats = anonymize(source, output)
+    print("Done:", stats)
 
 
 if __name__ == "__main__":

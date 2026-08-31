@@ -45,7 +45,7 @@
     },
     "folder": {
       "title": "Select the data folder",
-      "body": "Choose the folder that contains the Excel files (contracts_financials.xlsx, allocations.xlsx and optionally opportunities.xlsx).",
+      "body": "Choose the folder that contains the Excel files (security_financials.xlsx).",
       "browse": "Browse…",
       "placeholder": "Data folder path",
       "validate": "Validate folder"

@@ -45,7 +45,7 @@
     },
     "folder": {
       "title": "Seleziona la cartella dati",
-      "body": "Scegli la cartella che contiene i file Excel (contracts_financials.xlsx, allocations.xlsx e opzionalmente opportunities.xlsx).",
+      "body": "Scegli la cartella che contiene i file Excel (security_financials.xlsx).",
       "browse": "Sfoglia…",
       "placeholder": "Percorso della cartella dati",
       "validate": "Verifica cartella"
