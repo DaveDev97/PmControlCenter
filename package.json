@@ -61,14 +61,17 @@
       "target": [
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
-      ],
-      "artifactName": "PM-Control-Center-${version}-${arch}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "PM Control Center"
+      "shortcutName": "PM Control Center",
+      "artifactName": "PM-Control-Center-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PM-Control-Center-Portable-${version}-${arch}.${ext}"
     },
     "publish": [
       {
