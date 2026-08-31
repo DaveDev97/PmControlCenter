@@ -205,4 +205,4 @@ Contributi benvenuti! Apri issue o PR su GitHub.
 
 ---
 
-**Sviluppato con** ❤️ **da BNPP Security Account Management Team**
+**Sviluppato con** ❤️
