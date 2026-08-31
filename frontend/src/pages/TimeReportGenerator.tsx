@@ -54,48 +54,14 @@ export default function TimeReportGenerator() {
     queryFn: () => api.get<Project[]>("/api/projects"),
   });
 
-  // Build WBS options with budget info
+  // Real WBS options (budget from the owning contract, consumed cost from hours).
+  const { data: wbsData } = useQuery({
+    queryKey: ["wbs-budget"],
+    queryFn: () => api.get<WBSOption[]>("/api/time-reports/wbs"),
+  });
   useEffect(() => {
-    if (contracts && projects) {
-      const options: WBSOption[] = [];
-
-      // Add contract WBS
-      contracts.forEach(c => {
-        if (c.wbs_l1) {
-          options.push({
-            wbs: c.wbs_l1,
-            contractName: c.name,
-            budgetTotal: 100000, // Mock: would come from financials
-            budgetUsed: 45000,   // Mock: calculated from allocations
-            budgetAvailable: 55000,
-          });
-        }
-      });
-
-      // Add project WBS
-      projects.forEach(p => {
-        if (p.wbs) {
-          const contract = contracts.find(c => c.id === p.contract_id);
-          options.push({
-            wbs: p.wbs,
-            contractName: `${contract?.name || 'Unknown'} / ${p.name}`,
-            budgetTotal: p.budget || 0,
-            budgetUsed: 0, // Mock
-            budgetAvailable: p.budget || 0,
-          });
-        }
-      });
-
-      // Add common non-WBS entries
-      options.push(
-        { wbs: "Meeting Time", contractName: "Non Chargeable", budgetTotal: 0, budgetUsed: 0, budgetAvailable: 0 },
-        { wbs: "Permesso", contractName: "Non Chargeable", budgetTotal: 0, budgetUsed: 0, budgetAvailable: 0 },
-        { wbs: "Other Client", contractName: "Non Chargeable", budgetTotal: 0, budgetUsed: 0, budgetAvailable: 0 },
-      );
-
-      setWbsOptions(options);
-    }
-  }, [contracts, projects]);
+    if (wbsData) setWbsOptions(wbsData);
+  }, [wbsData]);
 
   const handlePreview = async () => {
     try {

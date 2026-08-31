@@ -41,6 +41,7 @@ jobs:
             --collect-all numpy `
             --collect-all sqlalchemy `
             --collect-all openpyxl `
+            --collect-all pptx `
             --collect-submodules aiosqlite `
             --collect-submodules uvicorn `
             --collect-submodules anyio `

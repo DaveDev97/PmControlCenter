@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import DatePicker from "react-datepicker";
-import { Filter, HelpCircle } from "lucide-react";
+import { Filter, HelpCircle, Presentation, Loader2 } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { api } from "../lib/api";
 import type { AccountDashboard as AccountData } from "../lib/types";
@@ -17,6 +17,29 @@ export default function AccountDashboard() {
   const [selectedFY, setSelectedFY] = useState<string>("2026");
   const [compareFY, setCompareFY] = useState(false);
   const [filtersActive, setFiltersActive] = useState(false);
+  const [genPpt, setGenPpt] = useState(false);
+
+  async function generatePpt() {
+    setGenPpt(true);
+    try {
+      const base = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || "";
+      const res = await fetch(`${base}/api/reports/account-ppt`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Account_Summary.pptx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Errore nella generazione del PPT: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setGenPpt(false);
+    }
+  }
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["account", startDate, endDate, selectedFY, compareFY, filtersActive],
@@ -145,7 +168,17 @@ export default function AccountDashboard() {
               {data.opportunities_count} opportunità
             </p>
           </div>
-          <div className="rounded-lg bg-brand-100 px-4 py-2 text-right">
+          <div className="flex items-start gap-3">
+            <button
+              onClick={generatePpt}
+              disabled={genPpt}
+              className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-brand-600 disabled:opacity-50"
+              title="Genera un riepilogo PPT dell'account (usa Claude Code)"
+            >
+              {genPpt ? <Loader2 size={16} className="animate-spin" /> : <Presentation size={16} />}
+              {genPpt ? "Generazione…" : "Genera PPT"}
+            </button>
+            <div className="rounded-lg bg-brand-100 px-4 py-2 text-right">
             <div className="text-xs font-medium text-brand-700">Fiscal Year</div>
             <div className="text-2xl font-bold text-brand-800">
               FY {selectedFY}
@@ -159,6 +192,7 @@ export default function AccountDashboard() {
                 {endDate && ` - ${endDate.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' })}`}
               </div>
             )}
+            </div>
           </div>
         </div>
       </header>
