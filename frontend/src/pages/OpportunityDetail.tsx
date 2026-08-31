@@ -14,6 +14,7 @@ export default function OpportunityDetail() {
   const [expandedDD, setExpandedDD] = useState<number | null>(null);
   const [editingDD, setEditingDD] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<DueDiligence>>({});
+  const [templateType, setTemplateType] = useState("standard");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["opportunity", id],
@@ -30,6 +31,14 @@ export default function OpportunityDetail() {
       setEditingDD(null);
       setEditForm({});
     },
+  });
+
+  const applyTemplate = useMutation({
+    mutationFn: () =>
+      api.post(`/api/opportunities/${id}/due-diligence/apply-template`, {
+        template_type: templateType,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["opportunity", id] }),
   });
 
   if (isLoading) return <Loading />;
@@ -197,6 +206,35 @@ export default function OpportunityDetail() {
               </div>
             </div>
           )}
+        </Card>
+      )}
+
+      {/* DD empty state: apply a template to generate the checklist */}
+      {(!data.due_diligences || data.due_diligences.length === 0) && (
+        <Card title="Due Diligence" className="mb-6">
+          <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+            Nessuno step di Due Diligence per questa opportunità. Applica un template
+            per generare la checklist sequenziale, poi aggiorna stati, scadenze e approvazioni.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={templateType}
+              onChange={(e) => setTemplateType(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+            >
+              <option value="standard">Standard</option>
+              <option value="fast-track">Fast-track</option>
+              <option value="extension">Extension</option>
+            </select>
+            <button
+              onClick={() => applyTemplate.mutate()}
+              disabled={applyTemplate.isPending}
+              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white shadow hover:bg-brand-600 disabled:opacity-50"
+            >
+              {applyTemplate.isPending ? "Applicazione…" : "Applica template DD"}
+            </button>
+          </div>
+          {applyTemplate.error && <ErrorBox error={applyTemplate.error} />}
         </Card>
       )}
 
