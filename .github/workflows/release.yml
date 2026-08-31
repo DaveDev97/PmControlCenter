@@ -27,15 +27,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Bundle the FastAPI backend into a single .exe so users don't need Python.
-      # (onefile: fewer files to extract/scan than onedir — the onedir build made
-      # the portable/installer hang under corporate AV. This launches reliably.)
+      # Bundle the FastAPI backend with PyInstaller --onedir. onedir runs directly
+      # from its folder (no %TEMP% extraction each launch), which is the build the
+      # user confirmed working. First launch can be slow while AV scans the files,
+      # but the app now shows a loading screen during that wait.
       - name: Build backend executable (PyInstaller)
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt pyinstaller
           cd backend
-          pyinstaller --onefile --noconfirm --name pmcc-backend `
+          pyinstaller --onedir --noconfirm --name pmcc-backend `
             --collect-all pandas `
             --collect-all numpy `
             --collect-all sqlalchemy `
@@ -44,7 +45,8 @@ jobs:
             --collect-submodules uvicorn `
             --collect-submodules anyio `
             run_backend.py
-          Copy-Item dist/pmcc-backend.exe pmcc-backend.exe -Force
+          if (Test-Path pmcc-backend) { Remove-Item pmcc-backend -Recurse -Force }
+          Move-Item dist/pmcc-backend pmcc-backend
 
       - name: Install Node dependencies
         run: npm install

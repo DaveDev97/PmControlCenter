@@ -4,8 +4,28 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light dark;
+/* Bind native form controls to the APP theme, not the OS preference — otherwise
+   inputs/checkboxes render dark on a Windows machine set to dark mode. */
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Text/number/other inputs: explicit colors per theme (native default followed
+   the OS and showed dark fields in light mode). */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea {
+  background-color: #ffffff;
+  color: #1e293b;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea {
+  background-color: #334155;
+  color: #e2e8f0;
 }
 
 body {

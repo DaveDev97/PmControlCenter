@@ -68,6 +68,15 @@ export default function SetupWizard() {
     try {
       const r = await settingsApi.configure(folder);
       setResult(r);
+      // Mark data as configured immediately so the dashboard gate doesn't bounce
+      // back to the wizard on a stale status, then refresh everything.
+      queryClient.setQueryData(["data-status"], {
+        configured: true,
+        loaded: true,
+        contracts: r.counts?.contracts ?? 0,
+        last_sync: r.last_sync ?? null,
+        data_folder: r.data_folder ?? folder,
+      });
       await queryClient.invalidateQueries();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

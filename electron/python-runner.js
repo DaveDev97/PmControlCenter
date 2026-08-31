@@ -88,7 +88,7 @@ function apiBase() {
 
 // Poll /api/health until it responds AND the body is clearly OUR backend
 // (guards against latching onto a foreign service that happens to answer).
-function waitUntilReady(retries = 240, intervalMs = 500) {
+function waitUntilReady(retries = 600, intervalMs = 500) {
   return new Promise((resolve, reject) => {
     const attempt = (n) => {
       const req = http.get(

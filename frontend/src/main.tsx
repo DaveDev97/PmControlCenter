@@ -38,6 +38,11 @@ function ProtectedLayout() {
     queryKey: ["data-status"],
     queryFn: settingsApi.status,
     retry: false,
+    // Always re-check freshly on mount, so returning from the wizard never sees
+    // a stale "not configured" status (which caused the setup to run twice).
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
 
   if (isLoading) {
