@@ -19,6 +19,12 @@ function backendDir(app) {
     : path.join(__dirname, "..", "backend");
 }
 
+function frontendDir(app) {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "frontend", "dist")
+    : path.join(__dirname, "..", "frontend", "dist");
+}
+
 function packagedExecutable(app) {
   // A PyInstaller onefile build placed next to the backend sources.
   const exe = process.platform === "win32" ? "pmcc-backend.exe" : "pmcc-backend";
@@ -28,7 +34,11 @@ function packagedExecutable(app) {
 
 function start(app, logStream) {
   const cwd = backendDir(app);
-  const env = { ...process.env, PMCC_BACKEND_PORT: String(BACKEND_PORT) };
+  const env = {
+    ...process.env,
+    PMCC_BACKEND_PORT: String(BACKEND_PORT),
+    PMCC_FRONTEND_DIR: frontendDir(app),
+  };
   const exe = packagedExecutable(app);
 
   if (exe) {

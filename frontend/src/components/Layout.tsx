@@ -116,7 +116,7 @@ export default function Layout() {
                 Control Center
               </div>
               <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                Davide Security Account Management
+                Security Account Management
               </div>
             </div>
           )}

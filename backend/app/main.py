@@ -5,10 +5,13 @@ already been configured, loads the Excel workbooks. When no folder is
 configured yet the API still starts (returning empty datasets / a "not
 configured" status) so the frontend can present the Setup Wizard.
 """
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     cost_balancer,
@@ -40,7 +43,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.2", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,3 +72,24 @@ async def health():
         "app": settings.app_name,
         "configured": settings.data_folder is not None,
     }
+
+
+def _frontend_dir() -> Path | None:
+    """Locate the built frontend (Electron passes PMCC_FRONTEND_DIR; dev falls back)."""
+    candidates: list[Path] = []
+    env_dir = os.environ.get("PMCC_FRONTEND_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir))
+    candidates.append(Path(__file__).resolve().parents[2] / "frontend" / "dist")
+    for c in candidates:
+        if c.exists() and (c / "index.html").exists():
+            return c
+    return None
+
+
+# Serve the built SPA same-origin so the desktop/browser client needs no CORS
+# and asset paths (/logo.svg, /assets/...) resolve correctly. Mounted LAST so
+# it never shadows the API routes above.
+_FRONTEND_DIR = _frontend_dir()
+if _FRONTEND_DIR is not None:
+    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")

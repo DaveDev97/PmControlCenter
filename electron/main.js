@@ -31,18 +31,18 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      env: { PMCC_API_BASE: backend.API_BASE },
     },
   });
 
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
-  const devUrl = process.env.ELECTRON_START_URL;
-  if (devUrl) {
-    mainWindow.loadURL(devUrl);
+  // The backend serves the built SPA same-origin, so we load it over HTTP
+  // (not file://): this avoids CORS/preflight 405s and fixes absolute asset
+  // paths like /logo.svg. In dev, ELECTRON_START_URL points at the Vite server.
+  const startUrl = process.env.ELECTRON_START_URL || backend.API_BASE;
+  mainWindow.loadURL(startUrl);
+  if (process.env.ELECTRON_START_URL) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "frontend", "dist", "index.html"));
   }
 
   // Open external links in the system browser, not inside the app.
