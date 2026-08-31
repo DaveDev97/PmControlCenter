@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
+    chat,
     cost_balancer,
     cost_space,
     crud,
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="1.0.8", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.9", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,6 +55,7 @@ app.add_middleware(
 )
 
 app.include_router(settings_api.router)
+app.include_router(chat.router)
 app.include_router(dashboard.router)
 app.include_router(crud.router)
 app.include_router(projects.router)

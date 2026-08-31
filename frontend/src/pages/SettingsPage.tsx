@@ -181,6 +181,30 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        {/* AI chat model (Claude Code) */}
+        <Section title={t("settings.chatModel")} help={t("settings.chatModelHelp")}>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { v: "", label: t("settings.modelDefault") },
+              { v: "opus", label: "Opus" },
+              { v: "sonnet", label: "Sonnet" },
+              { v: "haiku", label: "Haiku" },
+            ].map((m) => (
+              <button
+                key={m.v || "default"}
+                onClick={() => set("chat_model", m.v)}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                  (current.chat_model || "") === m.v
+                    ? "border-brand-500 bg-brand-500 text-white"
+                    : "border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </Section>
+
         <div className="flex items-center gap-3">
           <button
             onClick={handleSave}

@@ -8,8 +8,21 @@ export interface AppSettings {
   language: string;
   theme: string;
   auto_refresh_minutes: number;
+  chat_model: string;
   configured: boolean;
 }
+
+export interface ChatStatus {
+  available: boolean;
+  path: string | null;
+  model: string;
+}
+
+export const chatApi = {
+  status: () => api.get<ChatStatus>("/api/chat/status"),
+  send: (message: string) =>
+    api.post<{ reply: string; available: boolean; model?: string }>("/api/chat", { message }),
+};
 
 export interface FolderValidation {
   valid: boolean;

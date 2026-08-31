@@ -41,7 +41,9 @@ SETTINGS_FILE = APP_DATA_DIR / "settings.json"
 LOG_DIR = APP_DATA_DIR / "logs"
 
 # Fields persisted to (and reloaded from) settings.json.
-_PERSISTED_FIELDS = ("data_folder", "last_sync", "language", "theme", "auto_refresh_minutes")
+_PERSISTED_FIELDS = (
+    "data_folder", "last_sync", "language", "theme", "auto_refresh_minutes", "chat_model",
+)
 
 
 class Settings(BaseSettings):
@@ -59,6 +61,7 @@ class Settings(BaseSettings):
     language: str = "it"  # it | en
     theme: str = "light"  # light | dark | auto
     auto_refresh_minutes: int = 0  # 0 = disabled
+    chat_model: str = ""  # Claude Code model alias: "" (default) | opus | sonnet | haiku
 
     # --- Static application constants (KPI logic) ---
     working_days_per_month: float = 20.0

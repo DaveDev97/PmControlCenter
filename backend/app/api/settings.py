@@ -38,6 +38,7 @@ class SettingsUpdate(BaseModel):
     language: str | None = None
     theme: str | None = None
     auto_refresh_minutes: int | None = None
+    chat_model: str | None = None
 
 
 class SettingsOut(BaseModel):
@@ -47,6 +48,7 @@ class SettingsOut(BaseModel):
     language: str
     theme: str
     auto_refresh_minutes: int
+    chat_model: str
     configured: bool
 
 
@@ -58,6 +60,7 @@ def _settings_out() -> SettingsOut:
         language=settings.language,
         theme=settings.theme,
         auto_refresh_minutes=settings.auto_refresh_minutes,
+        chat_model=settings.chat_model,
         configured=settings.data_folder is not None,
     )
 

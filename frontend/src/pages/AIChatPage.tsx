@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, RotateCcw } from "lucide-react";
-import { Card } from "../components/ui";
+import { chatApi } from "../lib/settings";
 
 interface Message {
   id: string;
@@ -47,22 +47,30 @@ export default function AIChatPage() {
       timestamp: new Date(),
     };
 
+    const question = input;
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
 
-    // Simulate AI response (in produzione chiamaREBBE API Claude/MCP)
-    setTimeout(() => {
-      const response = generateMockResponse(input);
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: response,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+    try {
+      const { reply } = await chatApi.send(question);
+      setMessages((prev) => [
+        ...prev,
+        { id: (Date.now() + 1).toString(), role: "assistant", content: reply, timestamp: new Date() },
+      ]);
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "⚠️ Errore nel contattare Claude Code: " + (e instanceof Error ? e.message : String(e)),
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleReset = () => {
@@ -185,82 +193,3 @@ export default function AIChatPage() {
   );
 }
 
-// Mock response generator (sostituire con chiamata API Claude reale)
-function generateMockResponse(userInput: string): string {
-  const lower = userInput.toLowerCase();
-
-  if (lower.includes("libera") || lower.includes("disponibil")) {
-    return (
-      "📊 **Risorse Disponibili ad Agosto 2026:**\n\n" +
-      "• **Daniele Guerra** - 75% disponibile (chargeability 25%)\n" +
-      "• **Alice Oppi** - 50% disponibile (27% util attuale)\n" +
-      "• **Giovanna Giordano** - 55% disponibile (23% util attuale)\n\n" +
-      "Queste risorse hanno capacity per nuovi progetti. Vuoi vedere i dettagli di allocazione?"
-    );
-  }
-
-  if (lower.includes("margine") || lower.includes("cci") || lower.includes("ci")) {
-    return (
-      "💰 **Analisi Margini (CCI %):**\n\n" +
-      "**Contratti BNL:**\n" +
-      "• 9940436673 - CCI 37% ✅ (target 35%)\n\n" +
-      "**Contratti Findomestic:**\n" +
-      "• 9940435940 - CCI 32% ⚠️ (sotto target)\n\n" +
-      "Il contratto Findomestic richiede ottimizzazione. Vuoi vedere il Cost Balancer?"
-    );
-  }
-
-  if (lower.includes("sovrallocat") || lower.includes("overallocat")) {
-    return (
-      "⚠️ **Risorse Sovrallocate:**\n\n" +
-      "Attualmente **nessuna risorsa** è sovrallocata (utilizzo >100%).\n\n" +
-      "Risorse vicine al limite:\n" +
-      "• Paolo Zinzi - 90% utilization\n" +
-      "• Emanuela Sebastiano - 95% utilization\n\n" +
-      "Tutte le allocazioni sono sotto controllo!"
-    );
-  }
-
-  if (lower.includes("chargeability") || lower.includes("caricabili")) {
-    return (
-      "📈 **Chargeability Team:**\n\n" +
-      "**Media team:** 76%\n\n" +
-      "**Top performers:**\n" +
-      "• Alberto Lotito - 80%\n" +
-      "• Massimiliano Lanzi - 80%\n\n" +
-      "**Below target:**\n" +
-      "• Daniele Guerra - 25%\n" +
-      "• Davide Ambrosi - 50%\n\n" +
-      "Vuoi vedere i dettagli per risorsa?"
-    );
-  }
-
-  if (lower.includes("opportunit") || lower.includes("pipeline")) {
-    return (
-      "🎯 **Pipeline Status:**\n\n" +
-      "**Total Value:** €820k\n" +
-      "**Count:** 9 opportunità\n\n" +
-      "**Per Stage:**\n" +
-      "• CloseWon: 5 (€427k)\n" +
-      "• Proposal: 2 (€233k)\n" +
-      "• Qualified: 1 (€220k)\n" +
-      "• Lead: 1 (€150k)\n\n" +
-      "Stima impatto capacity: €533k costi richiesti"
-    );
-  }
-
-  // Default response
-  return (
-    "Interessante domanda! Al momento sto usando risposte simulate.\n\n" +
-    "Quando sarà integrato Claude via MCP, potrò:\n" +
-    "• Interrogare il database in tempo reale\n" +
-    "• Fare analisi complesse sui dati\n" +
-    "• Suggerire azioni concrete\n" +
-    "• Generare report personalizzati\n\n" +
-    "Prova a chiedermi di:\n" +
-    "• Trovare risorse disponibili\n" +
-    "• Analizzare margini contratti\n" +
-    "• Verificare chargeability team\n" +
-    "• Vedere stato pipeline"
-  );
-}

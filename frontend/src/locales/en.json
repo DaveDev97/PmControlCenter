@@ -97,7 +97,10 @@
     "reloadData": "Reload data",
     "reloading": "Reloading…",
     "saved": "Settings saved",
-    "checkUpdates": "Check for updates"
+    "checkUpdates": "Check for updates",
+    "chatModel": "AI model (Claude Code)",
+    "chatModelHelp": "Model used by the chat, via Claude Code installed on your PC.",
+    "modelDefault": "Default"
   },
   "errors": {
     "loadFailed": "Failed to load data",
