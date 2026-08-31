@@ -39,12 +39,13 @@ DEFAULT_OUTPUT = EXPORT_DIR / "sample_data" / "security_financials.xlsx"
 AMOUNT_SCALE = 0.8137
 
 # --- Fake value pools -------------------------------------------------------
+# Deliberately chosen to NOT overlap with any real first name in the source.
 FIRST_NAMES = [
-    "marco", "luca", "giulia", "sara", "andrea", "chiara", "matteo", "elena",
-    "davide", "laura", "simone", "martina", "alberto", "federica", "stefano",
-    "valentina", "roberto", "silvia", "antonio", "francesca", "paolo", "anna",
-    "giorgio", "elisa", "riccardo", "beatrice", "fabio", "ilaria", "nicola",
-    "serena",
+    "marco", "luca", "giulia", "sara", "andrea", "chiara", "elena", "laura",
+    "simone", "martina", "federica", "valentina", "roberto", "silvia", "antonio",
+    "anna", "giorgio", "elisa", "riccardo", "fabio", "ilaria", "nicola",
+    "serena", "pietro", "tommaso", "aurora", "noemi", "cristina", "gabriele",
+    "monica",
 ]
 LAST_NAMES = [
     "rossi", "bianchi", "ferrari", "russo", "romano", "gallo", "costa", "conti",
@@ -54,14 +55,23 @@ LAST_NAMES = [
     "villa",
 ]
 CLIENT_BRANDS = {
-    "BNL": "AlphaBank",
+    # Longer/more specific tokens first (applied in length order at runtime).
+    "BNP Paribas": "Acme Group",
     "Findomestic": "BetaCredit",
-    "Findo": "BetaCredit",
-    "Avanade": "GammaTech",
-    "Savoy": "DeltaCorp",
-    "Mooney": "EpsilonPay",
-    "EACB": "ZetaGroup",
     "Worldline": "OmegaPay",
+    "Cardif": "SigmaInsure",
+    "Cetelem": "ThetaFin",
+    "Paribas": "Acme Group",
+    "Avanade": "GammaTech",
+    "Mooney": "EpsilonPay",
+    "Arval": "LambdaLease",
+    "Nickel": "KappaPay",
+    "Findo": "BetaCredit",
+    "Savoy": "DeltaCorp",
+    "EACB": "ZetaGroup",
+    "BNPP": "Acme Group",
+    "BNP": "Acme Group",
+    "BNL": "AlphaBank",
 }
 
 
@@ -104,6 +114,43 @@ class Anonymizer:
         self.contracts: dict[str, str] = {}
         self._used_dotted: set[str] = set()
         self._used_full: set[str] = set()
+        self.person_rules: list[tuple[re.Pattern, str]] = []
+        self._brands = sorted(CLIENT_BRANDS, key=len, reverse=True)
+
+    def prescan(self, wb) -> None:
+        """Collect every person name up-front and derive spaced-name variants.
+
+        A person can appear as ``alberto.lotito`` in one sheet and as
+        ``Alberto Lotito`` (any case) in another; both must map to the SAME fake
+        identity. We seed the dotted-name map first, then build regex rules for
+        the ``first last`` / ``last first`` spaced forms.
+        """
+        found: set[str] = set()
+        token_re = re.compile(r"[A-Za-zÀ-ù]+\.[A-Za-zÀ-ù.]+")
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                for c in row:
+                    if isinstance(c, str):
+                        for m in token_re.finditer(c):
+                            if DOTTED_RE.match(m.group()):
+                                found.add(m.group().lower())
+        for d in sorted(found):
+            self.dotted(d)  # assign a stable fake for each real dotted name
+        for real, fake in self.names.items():
+            parts = real.split(".")
+            fparts = fake.split(".")
+            if len(parts) < 2 or len(fparts) < 2:
+                continue
+            # Skip short name fragments (e.g. "f", "a", "de") — they would match
+            # inside unrelated words. Require word boundaries around the pair.
+            if len(parts[0]) < 3 or len(parts[-1]) < 3:
+                continue
+            rf, rl = re.escape(parts[0]), re.escape(parts[-1])
+            ff, fl = fparts[0].capitalize(), fparts[-1].capitalize()
+            self.person_rules.append(
+                (re.compile(rf"\b{rf}\s+{rl}\b", re.IGNORECASE), f"{ff} {fl}"))
+            self.person_rules.append(
+                (re.compile(rf"\b{rl}\s+{rf}\b", re.IGNORECASE), f"{fl} {ff}"))
 
     # -- consistent generators --
     def dotted(self, original: str) -> str:
@@ -159,10 +206,17 @@ class Anonymizer:
         return value
 
     def anon_text(self, s: str) -> str:
-        """Replace embedded contract numbers and client tokens inside free text."""
+        """Replace embedded contract numbers, person names and client tokens."""
         out = re.sub(r"994\d{7}", lambda m: self.contract(m.group()), s)
-        for token, brand in CLIENT_BRANDS.items():
-            out = re.sub(re.escape(token), brand, out, flags=re.IGNORECASE)
+        # Dotted person names embedded in longer text (e.g. "resp: alberto.lotito").
+        for real, fake in self.names.items():
+            out = re.sub(re.escape(real), fake, out, flags=re.IGNORECASE)
+        # Spaced "First Last" / "Last First" variants of the same people.
+        for rx, rep in self.person_rules:
+            out = rx.sub(rep, out)
+        # Client / entity tokens (longest first, whole-word).
+        for token in self._brands:
+            out = re.sub(rf"\b{re.escape(token)}\b", CLIENT_BRANDS[token], out, flags=re.IGNORECASE)
         return out
 
     def _transform_str(self, s: str):
@@ -215,6 +269,7 @@ class Anonymizer:
 def anonymize(source: Path, output: Path) -> dict:
     wb = openpyxl.load_workbook(source, data_only=True)  # freeze formulas to values
     anon = Anonymizer(RNG)
+    anon.prescan(wb)  # collect all person names first (so spaced variants map consistently)
     cells = 0
     for ws in wb.worksheets:
         for row in ws.iter_rows():

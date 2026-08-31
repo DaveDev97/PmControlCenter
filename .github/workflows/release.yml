@@ -47,16 +47,27 @@ jobs:
       - name: Install Node dependencies
         run: npm install
 
+      # Code signing (optional): only enable it when the secret actually exists.
+      # electron-builder treats a *defined-but-empty* CSC_LINK as "sign now" and
+      # fails, so we must leave the vars UNSET when no certificate is configured.
+      - name: Configure code signing (optional)
+        shell: bash
+        env:
+          SECRET_CSC: ${{ secrets.WINDOWS_CSC_LINK }}
+          SECRET_PWD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "$SECRET_CSC" ]; then
+            echo "CSC_LINK=$SECRET_CSC" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$SECRET_PWD" >> "$GITHUB_ENV"
+            echo "Code signing: ENABLED"
+          else
+            echo "Code signing: disabled (no WINDOWS_CSC_LINK secret) — building unsigned"
+          fi
+
       # Builds the React frontend + Electron installer/portable and uploads
-      # them to the GitHub Release for this tag.
-      #
-      # Code signing (optional): if the WINDOWS_CSC_LINK + WINDOWS_CSC_KEY_PASSWORD
-      # repository secrets are set, electron-builder signs the installer/portable
-      # automatically. When the secrets are absent the vars are empty and the
-      # build proceeds UNSIGNED (no error). See SIGNING.md for setup.
+      # them to the GitHub Release for this tag. Signs automatically if the
+      # previous step populated CSC_LINK. See SIGNING.md.
       - name: Build & publish desktop app
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
