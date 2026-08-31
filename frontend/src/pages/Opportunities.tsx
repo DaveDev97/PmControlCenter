@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import type { Contract, Opportunity } from "../lib/types";
 import { Card, Loading, ErrorBox, StatusBadge } from "../components/ui";
 import { fmtEur } from "../lib/format";
+import { useSort, SortTh } from "../lib/useTable";
 
 const STAGES = ["Lead", "Qualified", "Proposal", "CloseWon", "CloseLost"];
 
@@ -12,6 +13,8 @@ export default function Opportunities() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     contract_id: "",
@@ -55,10 +58,24 @@ export default function Opportunities() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["opportunities"] }),
   });
 
+  const accessors = {
+    name: (o: Opportunity) => o.name,
+    contract: (o: Opportunity) => o.contract_id,
+    quarter: (o: Opportunity) => o.quarter,
+    value: (o: Opportunity) => o.estimated_value,
+    stage: (o: Opportunity) => o.stage,
+  };
+  const filtered = (data || []).filter(
+    (o) =>
+      (stageFilter === "all" || o.stage === stageFilter) &&
+      (search === "" || (o.name || "").toLowerCase().includes(search.toLowerCase())),
+  );
+  const { sorted, sortKey, dir, toggle } = useSort(filtered, accessors, "value", "desc");
+
   if (isLoading) return <Loading />;
   if (error) return <ErrorBox error={error} />;
 
-  const total = (data || []).reduce((s, o) => s + o.estimated_value, 0);
+  const total = filtered.reduce((s, o) => s + o.estimated_value, 0);
 
   return (
     <div className="p-6">
@@ -66,7 +83,7 @@ export default function Opportunities() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Opportunità</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {data?.length || 0} opportunità · pipeline {fmtEur(total)}
+            {filtered.length} di {data?.length || 0} opportunità · pipeline {fmtEur(total)}
           </p>
         </div>
         <button
@@ -141,20 +158,53 @@ export default function Opportunities() {
         </Card>
       )}
 
+      {/* Filters */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cerca per nome…"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+        />
+        <button
+          onClick={() => setStageFilter("all")}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+            stageFilter === "all"
+              ? "border-brand-500 bg-brand-500 text-white"
+              : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          }`}
+        >
+          Tutti
+        </button>
+        {STAGES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setStageFilter(s)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              stageFilter === s
+                ? "border-brand-500 bg-brand-500 text-white"
+                : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
       <Card>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-800 text-left text-xs uppercase text-slate-400">
-              <th className="py-2">Nome</th>
-              <th>Contratto</th>
-              <th>Quarter</th>
-              <th className="text-right">Valore</th>
-              <th>Stage</th>
+              <SortTh label="Nome" sortKey="name" activeKey={sortKey} dir={dir} onSort={toggle} className="py-2" />
+              <SortTh label="Contratto" sortKey="contract" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortTh label="Quarter" sortKey="quarter" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortTh label="Valore" sortKey="value" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Stage" sortKey="stage" activeKey={sortKey} dir={dir} onSort={toggle} />
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {data?.map((o) => (
+            {sorted.map((o) => (
               <tr
                 key={o.id}
                 className="cursor-pointer border-b border-slate-50 hover:bg-slate-50 dark:bg-slate-900"

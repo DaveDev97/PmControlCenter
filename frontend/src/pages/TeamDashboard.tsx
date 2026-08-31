@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import type { TeamDashboard as TeamData } from "../lib/types";
 import { Card, KpiCard, StatusBadge, Loading, ErrorBox } from "../components/ui";
 import { fmtEur, fmtPct, fmtMonth } from "../lib/format";
+import { useSort, SortTh } from "../lib/useTable";
 
 function heatColor(u: number): string {
   if (u <= 0) return "bg-slate-100 text-slate-300";
@@ -19,6 +20,19 @@ export default function TeamDashboard() {
     queryKey: ["team"],
     queryFn: () => api.get<TeamData>("/api/dashboard/team"),
   });
+
+  const accessors: Record<string, (r: any) => unknown> = {
+    name: (r) => r.name,
+    role: (r) => r.role,
+    daily_rate: (r) => r.daily_rate,
+    utilization: (r) => r.utilization,
+    contracts_count: (r) => r.contracts_count,
+    monthly_cost: (r) => r.monthly_cost,
+    monthly_revenue: (r) => r.monthly_revenue,
+    margin: (r) => r.margin,
+    status: (r) => r.status,
+  };
+  const { sorted: roster, sortKey, dir, toggle } = useSort(data?.roster || [], accessors, "name", "asc");
 
   if (isLoading) return <Loading />;
   if (error) return <ErrorBox error={error} />;
@@ -47,19 +61,19 @@ export default function TeamDashboard() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-800 text-left text-xs uppercase text-slate-400">
-              <th className="py-2">Nome</th>
-              <th>Ruolo</th>
-              <th className="text-right">Tariffa</th>
-              <th className="text-right">Util%</th>
-              <th className="text-right">Contratti</th>
-              <th className="text-right">Costo/mese</th>
-              <th className="text-right">Ricavo/mese</th>
-              <th className="text-right">Margine</th>
-              <th>Stato</th>
+              <SortTh label="Nome" sortKey="name" activeKey={sortKey} dir={dir} onSort={toggle} className="py-2" />
+              <SortTh label="Ruolo" sortKey="role" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortTh label="Tariffa" sortKey="daily_rate" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Util%" sortKey="utilization" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Contratti" sortKey="contracts_count" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Costo/mese" sortKey="monthly_cost" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Ricavo/mese" sortKey="monthly_revenue" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Margine" sortKey="margin" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
+              <SortTh label="Stato" sortKey="status" activeKey={sortKey} dir={dir} onSort={toggle} />
             </tr>
           </thead>
           <tbody>
-            {data.roster.map((r) => (
+            {roster.map((r) => (
               <tr
                 key={r.resource_id}
                 onClick={() => navigate(`/person/${r.resource_id}`)}
