@@ -1,9 +1,9 @@
 {
   "name": "pm-control-center",
   "productName": "PM Control Center",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Desktop app for project, resource and opportunity control — reads data from shared Excel files.",
-  "author": "BNPP Security Account Management Team",
+  "author": "Davide Security Account Management Team",
   "license": "MIT",
   "main": "electron/main.js",
   "scripts": {

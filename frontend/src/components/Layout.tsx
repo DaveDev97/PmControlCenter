@@ -116,7 +116,7 @@ export default function Layout() {
                 Control Center
               </div>
               <div className="text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                BNPP Security Account Management
+                Davide Security Account Management
               </div>
             </div>
           )}
@@ -165,7 +165,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className="flex items-center justify-between">
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.0</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.1</div>
             )}
 
             <div className="flex gap-2">
