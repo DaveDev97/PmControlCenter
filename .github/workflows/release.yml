@@ -49,7 +49,14 @@ jobs:
 
       # Builds the React frontend + Electron installer/portable and uploads
       # them to the GitHub Release for this tag.
+      #
+      # Code signing (optional): if the WINDOWS_CSC_LINK + WINDOWS_CSC_KEY_PASSWORD
+      # repository secrets are set, electron-builder signs the installer/portable
+      # automatically. When the secrets are absent the vars are empty and the
+      # build proceeds UNSIGNED (no error). See SIGNING.md for setup.
       - name: Build & publish desktop app
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
