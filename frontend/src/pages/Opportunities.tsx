@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Save } from "lucide-react";
 import { api } from "../lib/api";
 import type { Contract, Opportunity } from "../lib/types";
 import { Card, Loading, ErrorBox, StatusBadge } from "../components/ui";
@@ -8,6 +9,13 @@ import { fmtEur } from "../lib/format";
 import { useSort, SortTh } from "../lib/useTable";
 
 const STAGES = ["Lead", "Qualified", "Proposal", "CloseWon", "CloseLost"];
+const LEGAL_ENTITIES = [
+  "BNL S.p.A.",
+  "Mooney S.p.A.",
+  "Cardif",
+  "Worldline",
+  "Altra"
+];
 
 export default function Opportunities() {
   const navigate = useNavigate();
@@ -18,6 +26,7 @@ export default function Opportunities() {
   const [form, setForm] = useState({
     name: "",
     contract_id: "",
+    legal_entity: "",
     estimated_value: 0,
     quarter: "Q1",
     stage: "Lead",
@@ -38,12 +47,13 @@ export default function Opportunities() {
       api.post<Opportunity>("/api/opportunities", {
         ...body,
         contract_id: body.contract_id || null,
+        legal_entity: body.legal_entity || null,
         close_date: body.close_date || null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["opportunities"] });
       setShowForm(false);
-      setForm({ name: "", contract_id: "", estimated_value: 0, quarter: "Q1", stage: "Lead", close_date: "" });
+      setForm({ name: "", contract_id: "", legal_entity: "", estimated_value: 0, quarter: "Q1", stage: "Lead", close_date: "" });
     },
   });
 
@@ -57,6 +67,22 @@ export default function Opportunities() {
     mutationFn: (id: number) => api.del(`/api/opportunities/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["opportunities"] }),
   });
+
+  const [syncing, setSyncing] = useState(false);
+  const syncToExcel = async () => {
+    setSyncing(true);
+    try {
+      const base = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || "";
+      const res = await fetch(`${base}/api/excel/sync`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      alert(`✓ Dati sincronizzati su Excel: ${data.counts.opportunities} opportunità aggiornate`);
+    } catch (e) {
+      alert("Errore nella sincronizzazione: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const accessors = {
     name: (o: Opportunity) => o.name,
@@ -86,12 +112,23 @@ export default function Opportunities() {
             {filtered.length} di {data?.length || 0} opportunità · pipeline {fmtEur(total)}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-medium text-slate-800 dark:text-white hover:bg-brand-500"
-        >
-          {showForm ? "Annulla" : "+ Nuova opportunità"}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={syncToExcel}
+            disabled={syncing}
+            className="flex items-center gap-2 rounded-lg border border-brand-400 bg-white px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:bg-slate-800 dark:text-brand-400"
+            title="Sincronizza le modifiche con il file Excel"
+          >
+            <Save size={16} />
+            {syncing ? "Sincronizzazione..." : "Salva su Excel"}
+          </button>
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-medium text-slate-800 dark:text-white hover:bg-brand-500"
+          >
+            {showForm ? "Annulla" : "+ Nuova opportunità"}
+          </button>
+        </div>
       </header>
 
       {showForm && (
@@ -112,6 +149,20 @@ export default function Opportunities() {
               {contracts?.map((c) => (
                 <option  key={c.id} value={c.id} className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">
                   {c.id} · {c.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-3 py-2 text-sm"
+              value={form.legal_entity}
+              onChange={(e) => setForm({ ...form, legal_entity: e.target.value })}
+            >
+              <option value="" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">
+                (seleziona entity)
+              </option>
+              {LEGAL_ENTITIES.map((entity) => (
+                <option key={entity} value={entity} className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">
+                  {entity}
                 </option>
               ))}
             </select>
@@ -214,10 +265,14 @@ export default function Opportunities() {
                 <td>{o.contract_id || "-"}</td>
                 <td>{o.quarter || "-"}</td>
                 <td className="text-right">{fmtEur(o.estimated_value)}</td>
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   <select
                     value={o.stage}
-                    onChange={(e) => updateStage.mutate({ id: o.id, stage: e.target.value })}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      updateStage.mutate({ id: o.id, stage: e.target.value });
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                     className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs"
                   >
                     {STAGES.map((s) => (
@@ -227,7 +282,12 @@ export default function Opportunities() {
                 </td>
                 <td className="text-right">
                   <button
-                    onClick={() => remove.mutate(o.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Confermi l'eliminazione di "${o.name}"?`)) {
+                        remove.mutate(o.id);
+                      }
+                    }}
                     className="text-xs text-red-500 hover:underline"
                   >
                     Elimina

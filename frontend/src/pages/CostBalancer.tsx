@@ -55,7 +55,7 @@ export default function CostBalancer() {
           <Card title="Confronto Costi: Attuale vs Proposto" className="mb-6">
             <RevCostBars
               data={proposal.months.map((m, i) => ({
-                month: fmtMonth(m),
+                month: m,
                 revenues: proposal.current_revenues[i],
                 costs: proposal.current_costs[i],
                 ci: 0,

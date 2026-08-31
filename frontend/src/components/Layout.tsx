@@ -189,37 +189,39 @@ export default function Layout() {
 
         {/* Footer with version + controls */}
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
-          <div className="flex items-center justify-between">
+          <div className={`flex ${collapsed ? "flex-col items-center gap-2" : "items-center justify-between"}`}>
             {!collapsed && (
               <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.13</div>
             )}
 
-            <div className="flex gap-2">
+            <div className={`flex gap-2 ${collapsed ? "flex-col" : ""}`}>
               {/* Language toggle (IT <-> EN) */}
               <button
                 onClick={() => setLanguage((i18n.language.startsWith("it") ? "en" : "it") as Language)}
-                className="flex items-center gap-1 rounded p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
+                className={`flex items-center ${collapsed ? "justify-center" : "gap-1"} rounded p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700`}
                 title={i18n.language.startsWith("it") ? "English" : "Italiano"}
               >
                 <Languages size={16} />
-                <span className="text-[10px] font-semibold uppercase">
-                  {i18n.language.startsWith("it") ? "it" : "en"}
-                </span>
+                {!collapsed && (
+                  <span className="text-[10px] font-semibold uppercase">
+                    {i18n.language.startsWith("it") ? "it" : "en"}
+                  </span>
+                )}
               </button>
 
               {/* Dark mode toggle */}
               <button
                 onClick={toggleDarkMode}
-                className="rounded p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
+                className="flex items-center justify-center rounded p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
                 title={darkMode ? t("common.lightTheme") : t("common.darkTheme")}
               >
                 {darkMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
 
-              {/* Collapse toggle */}
+              {/* Collapse toggle - ALWAYS VISIBLE */}
               <button
                 onClick={() => setCollapsed(!collapsed)}
-                className="rounded p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
+                className="flex items-center justify-center rounded p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
                 title={collapsed ? "Espandi menu" : "Comprimi menu"}
               >
                 {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}

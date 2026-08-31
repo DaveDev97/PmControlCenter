@@ -51,6 +51,11 @@ export const statusDot: Record<string, string> = {
 // Format "2026-06" -> "Giu 26"
 const MONTHS_IT = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
 export function fmtMonth(m: string): string {
-  const [y, mo] = m.split("-");
-  return `${MONTHS_IT[parseInt(mo, 10) - 1]} ${y.slice(2)}`;
+  if (!m || typeof m !== "string") return "N/A";
+  const parts = m.split("-");
+  if (parts.length !== 2) return m; // Return as-is if format is unexpected
+  const [y, mo] = parts;
+  const monthIndex = parseInt(mo, 10) - 1;
+  if (isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) return m;
+  return `${MONTHS_IT[monthIndex]} ${y.slice(2)}`;
 }

@@ -20,6 +20,7 @@ from app.api import (
     crud,
     dashboard,
     due_diligence,
+    excel_sync,
     invoices,
     projects,
     reports,
@@ -67,6 +68,7 @@ app.include_router(time_reports.router)
 app.include_router(time_upload.router, prefix="/api/time-upload", tags=["time-upload"])
 app.include_router(invoices.router, prefix="/api/invoices", tags=["invoices"])
 app.include_router(reports.router)
+app.include_router(excel_sync.router)
 
 
 @app.get("/api/health", tags=["health"])

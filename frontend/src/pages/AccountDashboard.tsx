@@ -18,12 +18,40 @@ export default function AccountDashboard() {
   const [compareFY, setCompareFY] = useState(false);
   const [filtersActive, setFiltersActive] = useState(false);
   const [genPpt, setGenPpt] = useState(false);
+  const [showPptPreview, setShowPptPreview] = useState(false);
+  const [pptPlan, setPptPlan] = useState<string>("");
+  const [pptInstructions, setPptInstructions] = useState<string>("");
+  const [loadingPlan, setLoadingPlan] = useState(false);
+
+  async function requestPptPreview() {
+    setLoadingPlan(true);
+    setShowPptPreview(true);
+    try {
+      const base = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || "";
+      const res = await fetch(`${base}/api/reports/account-ppt/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructions: pptInstructions }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setPptPlan(data.plan || "Piano non disponibile");
+    } catch (e) {
+      setPptPlan("Errore nel caricamento del piano: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setLoadingPlan(false);
+    }
+  }
 
   async function generatePpt() {
     setGenPpt(true);
     try {
       const base = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || "";
-      const res = await fetch(`${base}/api/reports/account-ppt`, { method: "POST" });
+      const res = await fetch(`${base}/api/reports/account-ppt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructions: pptInstructions }),
+      });
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -34,6 +62,9 @@ export default function AccountDashboard() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      setShowPptPreview(false);
+      setPptInstructions("");
+      setPptPlan("");
     } catch (e) {
       alert("Errore nella generazione del PPT: " + (e instanceof Error ? e.message : String(e)));
     } finally {
@@ -158,7 +189,79 @@ export default function AccountDashboard() {
   );
 
   return (
-    <div className="p-6">
+    <>
+      {/* PPT Preview Modal */}
+      {showPptPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl dark:bg-slate-800">
+            <h2 className="mb-4 text-xl font-bold text-slate-800 dark:text-slate-100">
+              Anteprima Presentazione PPT
+            </h2>
+
+            <div className="mb-4">
+              <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Istruzioni personalizzate (opzionale):
+              </label>
+              <textarea
+                value={pptInstructions}
+                onChange={(e) => setPptInstructions(e.target.value)}
+                placeholder="Es: Concentrati sui KPI finanziari, enfatizza la crescita Q1..."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                rows={3}
+              />
+            </div>
+
+            <div className="mb-6 rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Struttura proposta:
+              </h3>
+              {loadingPlan ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  Generazione piano in corso con Claude Opus 5...
+                </div>
+              ) : (
+                <pre className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
+                  {pptPlan}
+                </pre>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowPptPreview(false);
+                  setPptInstructions("");
+                  setPptPlan("");
+                }}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                disabled={genPpt}
+              >
+                Annulla
+              </button>
+              <button
+                onClick={generatePpt}
+                disabled={genPpt || loadingPlan}
+                className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                {genPpt ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Generazione in corso...
+                  </>
+                ) : (
+                  <>
+                    <Presentation size={16} />
+                    Conferma e Genera
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-6">
       <header className="mb-5">
         <div className="flex items-start justify-between">
           <div>
@@ -170,13 +273,13 @@ export default function AccountDashboard() {
           </div>
           <div className="flex items-start gap-3">
             <button
-              onClick={generatePpt}
-              disabled={genPpt}
+              onClick={requestPptPreview}
+              disabled={genPpt || loadingPlan}
               className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-brand-600 disabled:opacity-50"
-              title="Genera un riepilogo PPT dell'account (usa Claude Code)"
+              title="Genera un riepilogo PPT dell'account (usa Claude Opus 5)"
             >
-              {genPpt ? <Loader2 size={16} className="animate-spin" /> : <Presentation size={16} />}
-              {genPpt ? "Generazione…" : "Genera PPT"}
+              {loadingPlan ? <Loader2 size={16} className="animate-spin" /> : <Presentation size={16} />}
+              {loadingPlan ? "Caricamento…" : "Genera PPT"}
             </button>
             <div className="rounded-lg bg-brand-100 px-4 py-2 text-right">
             <div className="text-xs font-medium text-brand-700">Fiscal Year</div>
@@ -318,5 +421,6 @@ export default function AccountDashboard() {
         </table>
       </Card>
     </div>
+    </>
   );
 }
