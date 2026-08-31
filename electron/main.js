@@ -26,7 +26,7 @@ function createWindow() {
     minHeight: 700,
     title: "PM Control Center",
     backgroundColor: "#0f172a",
-    show: false,
+    show: true, // show immediately so the user always sees a window
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -34,16 +34,9 @@ function createWindow() {
     },
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
-
-  // The backend serves the built SPA same-origin, so we load it over HTTP
-  // (not file://): this avoids CORS/preflight 405s and fixes absolute asset
-  // paths like /logo.svg. In dev, ELECTRON_START_URL points at the Vite server.
-  const startUrl = process.env.ELECTRON_START_URL || backend.apiBase();
-  mainWindow.loadURL(startUrl);
-  if (process.env.ELECTRON_START_URL) {
-    mainWindow.webContents.openDevTools({ mode: "detach" });
-  }
+  // Show a loading screen right away; the real app URL is loaded once the
+  // backend is ready (see startApp). This avoids a long "nothing happens" gap.
+  mainWindow.loadURL(loadingPage("Avvio in corso…", "Caricamento del motore dati…"));
 
   // Open external links in the system browser, not inside the app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -54,6 +47,30 @@ function createWindow() {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+}
+
+function loadingPage(title, subtitle) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:#0f172a;color:#e2e8f0;font-family:Segoe UI,system-ui,sans-serif}
+    .s{width:42px;height:42px;border:4px solid #334155;border-top-color:#6366f1;border-radius:50%;
+    animation:spin 1s linear infinite;margin-bottom:22px}@keyframes spin{to{transform:rotate(360deg)}}
+    h1{font-size:18px;margin:0 0 6px}p{color:#94a3b8;font-size:13px;margin:0}</style></head>
+    <body><div class="s"></div><h1>${title}</h1><p>${subtitle}</p></body></html>`;
+  return "data:text/html;charset=utf-8," + encodeURIComponent(html);
+}
+
+function errorPage(message, log) {
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{margin:0;min-height:100vh;box-sizing:border-box;padding:36px;background:#0f172a;color:#e2e8f0;
+    font-family:Segoe UI,system-ui,sans-serif}h1{color:#f87171;font-size:20px}
+    pre{white-space:pre-wrap;background:#1e293b;padding:14px;border-radius:8px;font-size:12px;
+    color:#cbd5e1;max-height:50vh;overflow:auto}</style></head>
+    <body><h1>Errore backend</h1><p>${esc(message)}</p>
+    <p style="color:#94a3b8;font-size:13px">Log del backend:</p>
+    <pre>${esc(log || "(nessun log)")}</pre></body></html>`;
+  return "data:text/html;charset=utf-8," + encodeURIComponent(html);
 }
 
 // ---- IPC handlers ----
@@ -90,25 +107,31 @@ function setupAutoUpdater() {
   }
 }
 
-app.whenReady().then(async () => {
-  await backend.start(app, backendLogStream());
+function readBackendLog() {
   try {
-    await backend.waitUntilReady();
-  } catch (e) {
-    let tail = "";
-    try {
-      const logPath = path.join(app.getPath("userData"), "logs", "backend.log");
-      const content = fs.readFileSync(logPath, "utf-8");
-      tail = "\n\n--- backend.log (last lines) ---\n" + content.slice(-2500);
-    } catch {
-      tail = "\n\n(no backend.log found — the backend process may have been blocked from starting)";
-    }
-    dialog.showErrorBox(
-      "Backend error",
-      "The application backend could not be started.\n\nError: " + String(e) + tail,
-    );
+    return fs.readFileSync(path.join(app.getPath("userData"), "logs", "backend.log"), "utf-8").slice(-4000);
+  } catch {
+    return "(nessun backend.log trovato — il processo backend potrebbe essere stato bloccato dalle policy/antivirus prima di avviarsi)";
   }
-  createWindow();
+}
+
+app.whenReady().then(async () => {
+  createWindow(); // window + loading screen appear immediately
+
+  if (process.env.ELECTRON_START_URL) {
+    mainWindow.loadURL(process.env.ELECTRON_START_URL);
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  } else {
+    await backend.start(app, backendLogStream());
+    try {
+      await backend.waitUntilReady();
+      mainWindow.loadURL(backend.apiBase()); // backend serves the SPA same-origin
+    } catch (e) {
+      const log = readBackendLog();
+      if (mainWindow) mainWindow.loadURL(errorPage(String(e), log));
+      dialog.showErrorBox("Backend error", String(e) + "\n\n--- backend.log ---\n" + log);
+    }
+  }
   setupAutoUpdater();
 
   if (process.platform === "darwin") Menu.setApplicationMenu(null);
