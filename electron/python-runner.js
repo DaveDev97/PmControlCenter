@@ -33,8 +33,11 @@ function frontendDir(app) {
 
 function packagedExecutable(app) {
   const exe = process.platform === "win32" ? "pmcc-backend.exe" : "pmcc-backend";
-  const candidate = path.join(backendDir(app), exe);
-  return fs.existsSync(candidate) ? candidate : null;
+  const candidates = [
+    path.join(backendDir(app), "pmcc-backend", exe), // PyInstaller --onedir
+    path.join(backendDir(app), exe), // PyInstaller --onefile (legacy)
+  ];
+  return candidates.find((c) => fs.existsSync(c)) || null;
 }
 
 function findFreePort() {
@@ -85,7 +88,7 @@ function apiBase() {
 
 // Poll /api/health until it responds AND the body is clearly OUR backend
 // (guards against latching onto a foreign service that happens to answer).
-function waitUntilReady(retries = 60, intervalMs = 500) {
+function waitUntilReady(retries = 240, intervalMs = 500) {
   return new Promise((resolve, reject) => {
     const attempt = (n) => {
       const req = http.get(

@@ -95,9 +95,17 @@ app.whenReady().then(async () => {
   try {
     await backend.waitUntilReady();
   } catch (e) {
+    let tail = "";
+    try {
+      const logPath = path.join(app.getPath("userData"), "logs", "backend.log");
+      const content = fs.readFileSync(logPath, "utf-8");
+      tail = "\n\n--- backend.log (last lines) ---\n" + content.slice(-2500);
+    } catch {
+      tail = "\n\n(no backend.log found — the backend process may have been blocked from starting)";
+    }
     dialog.showErrorBox(
       "Backend error",
-      "The application backend could not be started.\n\n" + String(e),
+      "The application backend could not be started.\n\nError: " + String(e) + tail,
     );
   }
   createWindow();
