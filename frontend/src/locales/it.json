@@ -1,0 +1,107 @@
+{
+  "app": {
+    "name": "Control Center",
+    "subtitle": "BNPP Security Account Management",
+    "version": "Versione"
+  },
+  "nav": {
+    "account": "Account",
+    "contracts": "Contratti",
+    "opportunities": "Opportunità",
+    "team": "Team",
+    "resources": "Risorse",
+    "costBalancer": "Cost Balancer",
+    "costSpace": "Cost Space",
+    "timeReports": "Time Reports",
+    "aiChat": "Claude AI Chat",
+    "settings": "Impostazioni"
+  },
+  "common": {
+    "save": "Salva",
+    "cancel": "Annulla",
+    "back": "Indietro",
+    "next": "Avanti",
+    "finish": "Completa",
+    "loading": "Caricamento…",
+    "refresh": "Aggiorna dati",
+    "close": "Chiudi",
+    "error": "Errore",
+    "success": "Operazione riuscita",
+    "yes": "Sì",
+    "no": "No",
+    "revenue": "Ricavi",
+    "costs": "Costi",
+    "margin": "Margine",
+    "lightTheme": "Tema chiaro",
+    "darkTheme": "Tema scuro"
+  },
+  "setup": {
+    "title": "Configurazione iniziale",
+    "welcome": {
+      "title": "Benvenuto in PM Control Center",
+      "body": "Questa applicazione legge i dati di contratti, risorse e opportunità da file Excel condivisi (es. una cartella SharePoint sincronizzata con OneDrive). Nessun server o database è richiesto.",
+      "requirements": "Ti serviranno i file:",
+      "start": "Inizia configurazione"
+    },
+    "folder": {
+      "title": "Seleziona la cartella dati",
+      "body": "Scegli la cartella che contiene i file Excel (contracts_financials.xlsx, allocations.xlsx e opzionalmente opportunities.xlsx).",
+      "browse": "Sfoglia…",
+      "placeholder": "Percorso della cartella dati",
+      "validate": "Verifica cartella"
+    },
+    "validation": {
+      "title": "Verifica file",
+      "checking": "Verifica dei file in corso…",
+      "valid": "Tutti i file richiesti sono presenti.",
+      "invalid": "Mancano alcuni file richiesti.",
+      "found": "File trovati",
+      "missing": "File mancanti",
+      "optional": "File opzionali trovati"
+    },
+    "loading": {
+      "title": "Caricamento dati",
+      "body": "Lettura dei file Excel e creazione del database locale…",
+      "done": "Dati caricati correttamente!"
+    },
+    "complete": {
+      "title": "Tutto pronto!",
+      "body": "La configurazione è completata. Puoi iniziare a usare l'applicazione.",
+      "summary": "Riepilogo dati caricati",
+      "goToDashboard": "Vai alla Dashboard"
+    },
+    "counts": {
+      "contracts": "Contratti",
+      "resources": "Risorse",
+      "financials": "Righe finanziarie",
+      "allocations": "Allocazioni",
+      "opportunities": "Opportunità",
+      "clients": "Clienti"
+    }
+  },
+  "settings": {
+    "title": "Impostazioni",
+    "dataFolder": "Cartella dati",
+    "dataFolderHelp": "Cartella condivisa contenente i file Excel.",
+    "change": "Cambia",
+    "language": "Lingua",
+    "theme": "Tema",
+    "themeLight": "Chiaro",
+    "themeDark": "Scuro",
+    "themeAuto": "Automatico",
+    "autoRefresh": "Aggiornamento automatico",
+    "autoRefreshHelp": "Ricarica i dati automaticamente ogni N minuti (0 = disattivato).",
+    "minutes": "minuti",
+    "lastSync": "Ultimo aggiornamento",
+    "never": "Mai",
+    "reloadData": "Ricarica dati",
+    "reloading": "Ricaricamento…",
+    "saved": "Impostazioni salvate",
+    "checkUpdates": "Verifica aggiornamenti"
+  },
+  "errors": {
+    "loadFailed": "Impossibile caricare i dati",
+    "invalidFolder": "Cartella non valida o file mancanti",
+    "notConfigured": "Nessuna cartella dati configurata"
+  }
+}

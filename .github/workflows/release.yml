@@ -1,0 +1,55 @@
+name: Release
+
+# Builds the Windows desktop package and publishes it to a GitHub Release
+# whenever you push a tag like v1.0.0.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # required to create the Release and upload assets
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Bundle the FastAPI backend into a single .exe so users don't need Python.
+      - name: Build backend executable (PyInstaller)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pyinstaller
+          cd backend
+          pyinstaller --onefile --name pmcc-backend `
+            --collect-all pandas `
+            --collect-all numpy `
+            --collect-all sqlalchemy `
+            --collect-all openpyxl `
+            --collect-submodules aiosqlite `
+            --collect-submodules uvicorn `
+            --collect-submodules anyio `
+            run_backend.py
+          Copy-Item dist/pmcc-backend.exe pmcc-backend.exe -Force
+
+      - name: Install Node dependencies
+        run: npm install
+
+      # Builds the React frontend + Electron installer/portable and uploads
+      # them to the GitHub Release for this tag.
+      - name: Build & publish desktop app
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

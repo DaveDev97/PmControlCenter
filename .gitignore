@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+output/
+dist/
+build/
+*.tsbuildinfo
+
+# PyInstaller
+backend/build/
+backend/dist/
+backend/*.spec
+backend/pmcc-backend
+backend/pmcc-backend.exe
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+
+# Runtime / user data (never commit)
+pm_overlay.json
+settings.json
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

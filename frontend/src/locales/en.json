@@ -1,0 +1,107 @@
+{
+  "app": {
+    "name": "Control Center",
+    "subtitle": "BNPP Security Account Management",
+    "version": "Version"
+  },
+  "nav": {
+    "account": "Account",
+    "contracts": "Contracts",
+    "opportunities": "Opportunities",
+    "team": "Team",
+    "resources": "Resources",
+    "costBalancer": "Cost Balancer",
+    "costSpace": "Cost Space",
+    "timeReports": "Time Reports",
+    "aiChat": "Claude AI Chat",
+    "settings": "Settings"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "loading": "Loading…",
+    "refresh": "Refresh data",
+    "close": "Close",
+    "error": "Error",
+    "success": "Success",
+    "yes": "Yes",
+    "no": "No",
+    "revenue": "Revenue",
+    "costs": "Costs",
+    "margin": "Margin",
+    "lightTheme": "Light theme",
+    "darkTheme": "Dark theme"
+  },
+  "setup": {
+    "title": "Initial setup",
+    "welcome": {
+      "title": "Welcome to PM Control Center",
+      "body": "This application reads contract, resource and opportunity data from shared Excel files (e.g. a SharePoint folder synced via OneDrive). No server or database is required.",
+      "requirements": "You will need the files:",
+      "start": "Start setup"
+    },
+    "folder": {
+      "title": "Select the data folder",
+      "body": "Choose the folder that contains the Excel files (contracts_financials.xlsx, allocations.xlsx and optionally opportunities.xlsx).",
+      "browse": "Browse…",
+      "placeholder": "Data folder path",
+      "validate": "Validate folder"
+    },
+    "validation": {
+      "title": "File check",
+      "checking": "Checking files…",
+      "valid": "All required files are present.",
+      "invalid": "Some required files are missing.",
+      "found": "Files found",
+      "missing": "Missing files",
+      "optional": "Optional files found"
+    },
+    "loading": {
+      "title": "Loading data",
+      "body": "Reading the Excel files and building the local database…",
+      "done": "Data loaded successfully!"
+    },
+    "complete": {
+      "title": "All set!",
+      "body": "Setup is complete. You can start using the application.",
+      "summary": "Loaded data summary",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "counts": {
+      "contracts": "Contracts",
+      "resources": "Resources",
+      "financials": "Financial rows",
+      "allocations": "Allocations",
+      "opportunities": "Opportunities",
+      "clients": "Clients"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "dataFolder": "Data folder",
+    "dataFolderHelp": "Shared folder containing the Excel files.",
+    "change": "Change",
+    "language": "Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "Auto",
+    "autoRefresh": "Auto refresh",
+    "autoRefreshHelp": "Automatically reload data every N minutes (0 = disabled).",
+    "minutes": "minutes",
+    "lastSync": "Last sync",
+    "never": "Never",
+    "reloadData": "Reload data",
+    "reloading": "Reloading…",
+    "saved": "Settings saved",
+    "checkUpdates": "Check for updates"
+  },
+  "errors": {
+    "loadFailed": "Failed to load data",
+    "invalidFolder": "Invalid folder or missing files",
+    "notConfigured": "No data folder configured"
+  }
+}

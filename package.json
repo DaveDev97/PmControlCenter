@@ -1,0 +1,81 @@
+{
+  "name": "pm-control-center",
+  "productName": "PM Control Center",
+  "version": "1.0.0",
+  "description": "Desktop app for project, resource and opportunity control — reads data from shared Excel files.",
+  "author": "BNPP Security Account Management Team",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "scripts": {
+    "postinstall": "cd frontend && npm install",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "cross-env ELECTRON_START_URL=http://localhost:3000 electron .",
+    "dev": "concurrently -k \"npm:dev:frontend\" \"npm:dev:electron\"",
+    "start": "electron .",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:frontend && electron-builder",
+    "dist:win": "npm run build:frontend && electron-builder --win",
+    "dist:portable": "npm run build:frontend && electron-builder --win portable",
+    "release": "npm run build:frontend && electron-builder --win --publish always"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.8"
+  },
+  "build": {
+    "appId": "com.bnpp.pmcontrolcenter",
+    "productName": "PM Control Center",
+    "directories": {
+      "output": "output"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!build/**",
+          "!dist/**",
+          "!*.spec",
+          "!.venv/**",
+          "!venv/**"
+        ]
+      },
+      {
+        "from": "sample_data",
+        "to": "sample_data"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "artifactName": "PM-Control-Center-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "PM Control Center"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "your-org",
+        "repo": "pm-control-center"
+      }
+    ]
+  }
+}

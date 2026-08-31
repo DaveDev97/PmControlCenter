@@ -1,0 +1,14 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Red circle -->
+  <circle cx="11" cy="16" r="9" fill="none" stroke="#E31937" stroke-width="2.5"/>
+  <!-- Blue circle -->
+  <circle cx="21" cy="16" r="9" fill="none" stroke="#6D9EAF" stroke-width="2.5"/>
+  <!-- Connecting dots -->
+  <circle cx="16" cy="10" r="1.5" fill="#5C3A3A"/>
+  <circle cx="16" cy="22" r="1.5" fill="#5C3A3A"/>
+  <!-- Inner bars -->
+  <rect x="10" y="12" width="2" height="8" rx="1" fill="#E31937"/>
+  <rect x="13" y="12" width="2" height="8" rx="1" fill="#5C3A3A"/>
+  <rect x="17" y="12" width="2" height="8" rx="1" fill="#6D9EAF"/>
+  <rect x="20" y="12" width="2" height="8" rx="1" fill="#9BC4D3"/>
+</svg>
