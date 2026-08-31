@@ -73,8 +73,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "your-org",
-        "repo": "pm-control-center"
+        "owner": "DaveDev97",
+        "repo": "PmControlCenter"
       }
     ]
   }

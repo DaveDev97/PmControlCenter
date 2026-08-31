@@ -25,7 +25,7 @@ PM Control Center è un'applicazione desktop Windows per la gestione di progetti
 
 ### Installazione
 
-1. Scarica `PM-Control-Center-Setup.exe` da [Releases](https://github.com/your-org/pm-control-center/releases)
+1. Scarica `PM-Control-Center-Setup.exe` da [Releases](https://github.com/DaveDev97/PmControlCenter/releases)
 2. Esegui installer (verifica automatica dipendenze)
 3. Avvia l'app dal desktop shortcut
 4. **Setup Wizard**: Seleziona cartella SharePoint con file Excel
@@ -124,7 +124,7 @@ Questo file NON va modificato manualmente. Contiene:
 
 ```bash
 # Clone repo
-git clone https://github.com/your-org/pm-control-center.git
+git clone https://github.com/DaveDev97/PmControlCenter.git
 cd pm-control-center/export
 
 # Install dependencies
@@ -200,8 +200,8 @@ Contributi benvenuti! Apri issue o PR su GitHub.
 
 ## 📧 Support
 
-- Issues: https://github.com/your-org/pm-control-center/issues
-- Docs: https://github.com/your-org/pm-control-center/wiki
+- Issues: https://github.com/DaveDev97/PmControlCenter/issues
+- Docs: https://github.com/DaveDev97/PmControlCenter/wiki
 
 ---
 
