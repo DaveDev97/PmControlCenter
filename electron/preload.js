@@ -8,9 +8,13 @@ const { contextBridge, ipcRenderer } = require("electron");
 // relative "/api/..." requests that always hit the correct backend.
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  /** Open the native directory picker; resolves to the chosen path or null. */
-  selectFolder: () => ipcRenderer.invoke("dialog:selectFolder"),
+  /** Open the native file picker (Excel); resolves to the chosen path or null. */
+  selectFile: () => ipcRenderer.invoke("dialog:selectFile"),
   getPlatform: () => process.platform,
-  /** Ask the main process to check for updates (no-op if unsupported). */
-  checkForUpdates: () => ipcRenderer.invoke("app:checkForUpdates"),
+  /** Trigger an update check; auto-downloads if one is found. */
+  checkForUpdates: () => ipcRenderer.invoke("updates:check"),
+  /** Poll the current update state ({status, percent, info, error}). */
+  getUpdateState: () => ipcRenderer.invoke("updates:state"),
+  /** Quit and install a downloaded update. */
+  installUpdate: () => ipcRenderer.invoke("updates:install"),
 });

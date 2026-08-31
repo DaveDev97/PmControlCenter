@@ -40,15 +40,15 @@
     "welcome": {
       "title": "Welcome to PM Control Center",
       "body": "This application reads contract, resource and opportunity data from shared Excel files (e.g. a SharePoint folder synced via OneDrive). No server or database is required.",
-      "requirements": "You will need the files:",
+      "requirements": "You will need the Excel file with the data (contracts, resources, opportunities).",
       "start": "Start setup"
     },
     "folder": {
-      "title": "Select the data folder",
-      "body": "Choose the folder that contains the Excel files (security_financials.xlsx).",
+      "title": "Select the Excel file",
+      "body": "Choose the Excel file with the data (any name, e.g. security_financials.xlsx).",
       "browse": "Browse…",
-      "placeholder": "Data folder path",
-      "validate": "Validate folder"
+      "placeholder": "Excel file path",
+      "validate": "Validate file"
     },
     "validation": {
       "title": "File check",
@@ -81,8 +81,8 @@
   },
   "settings": {
     "title": "Settings",
-    "dataFolder": "Data folder",
-    "dataFolderHelp": "Shared folder containing the Excel files.",
+    "dataFolder": "Data file",
+    "dataFolderHelp": "Shared Excel file with the data (any name).",
     "change": "Change",
     "language": "Language",
     "theme": "Theme",
@@ -100,7 +100,17 @@
     "checkUpdates": "Check for updates",
     "chatModel": "AI model (Claude Code)",
     "chatModelHelp": "Model used by the chat, via Claude Code installed on your PC.",
-    "modelDefault": "Default"
+    "modelDefault": "Default",
+    "updates": "Updates",
+    "updatesCheck": "Check for updates",
+    "updateChecking": "Checking…",
+    "updateNone": "The app is up to date.",
+    "updateAvailable": "Update {{v}} found, downloading…",
+    "updateDownloading": "Downloading {{p}}%…",
+    "updateDownloaded": "Version {{v}} ready — restart to install",
+    "updateInstall": "Restart & install",
+    "updateError": "Update error",
+    "updatesUnsupported": "Automatic updates are only available in the installed (Setup) version."
   },
   "errors": {
     "loadFailed": "Failed to load data",

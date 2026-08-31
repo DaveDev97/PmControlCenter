@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { FolderOpen, RefreshCw, Save, Check, Loader2 } from "lucide-react";
-import { settingsApi, pickFolder, isElectron, type AppSettings } from "../lib/settings";
+import { FolderOpen, RefreshCw, Save, Check, Loader2, DownloadCloud } from "lucide-react";
+import {
+  settingsApi, pickFile, isElectron, updates, type AppSettings, type UpdateState,
+} from "../lib/settings";
 import { setLanguage, type Language } from "../lib/i18n";
 
 export default function SettingsPage() {
@@ -20,6 +22,14 @@ export default function SettingsPage() {
   const [reloading, setReloading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upd, setUpd] = useState<UpdateState>({ status: "idle" });
+
+  useEffect(() => {
+    if (!updates.supported()) return;
+    updates.state().then(setUpd).catch(() => {});
+    const id = setInterval(() => updates.state().then(setUpd).catch(() => {}), 2000);
+    return () => clearInterval(id);
+  }, []);
 
   if (isLoading || !data) {
     return <div className="p-8 text-slate-500">{t("common.loading")}</div>;
@@ -33,7 +43,7 @@ export default function SettingsPage() {
   }
 
   async function handleBrowse() {
-    const picked = await pickFolder();
+    const picked = await pickFile();
     if (picked) {
       setFolder(picked);
       setSaved(false);
@@ -71,6 +81,27 @@ export default function SettingsPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setReloading(false);
+    }
+  }
+
+  async function handleCheckUpdates() {
+    setUpd({ status: "checking" });
+    try {
+      setUpd(await updates.check());
+    } catch (e) {
+      setUpd({ status: "error", error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  function updateLabel(): string {
+    switch (upd.status) {
+      case "checking": return t("settings.updateChecking");
+      case "available": return t("settings.updateAvailable", { v: upd.info?.version ?? "" });
+      case "downloading": return t("settings.updateDownloading", { p: upd.percent ?? 0 });
+      case "downloaded": return t("settings.updateDownloaded", { v: upd.info?.version ?? "" });
+      case "none": return t("settings.updateNone");
+      case "error": return `${t("settings.updateError")}: ${upd.error ?? ""}`;
+      default: return "";
     }
   }
 
@@ -203,6 +234,39 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </Section>
+
+        {/* Updates */}
+        <Section title={t("settings.updates")}>
+          {updates.supported() ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleCheckUpdates}
+                disabled={upd.status === "checking" || upd.status === "downloading"}
+                className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                {upd.status === "checking" || upd.status === "downloading" ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <DownloadCloud size={16} />
+                )}
+                {t("settings.updatesCheck")}
+              </button>
+              {upd.status === "downloaded" && (
+                <button
+                  onClick={() => updates.install()}
+                  className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white shadow hover:bg-brand-600"
+                >
+                  <DownloadCloud size={16} /> {t("settings.updateInstall")}
+                </button>
+              )}
+              {upd.status !== "idle" && (
+                <span className="text-sm text-slate-500 dark:text-slate-400">{updateLabel()}</span>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t("settings.updatesUnsupported")}</p>
+          )}
         </Section>
 
         <div className="flex items-center gap-3">

@@ -74,34 +74,58 @@ function errorPage(message, log) {
 }
 
 // ---- IPC handlers ----
-ipcMain.handle("dialog:selectFolder", async () => {
+ipcMain.handle("dialog:selectFile", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: "Select the data folder",
-    properties: ["openDirectory"],
+    title: "Seleziona il file Excel dei dati",
+    properties: ["openFile"],
+    filters: [
+      { name: "Excel", extensions: ["xlsx", "xlsm"] },
+      { name: "Tutti i file", extensions: ["*"] },
+    ],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
 
-ipcMain.handle("app:checkForUpdates", async () => {
-  if (updater) {
-    try {
-      await updater.checkForUpdatesAndNotify();
-      return { checking: true };
-    } catch (e) {
-      return { error: String(e) };
-    }
-  }
-  return { checking: false };
+// ---- Auto-update state + IPC ----
+// status: idle | checking | available | downloading | downloaded | none | error | unsupported
+let updateState = { status: app ? "idle" : "idle", info: null, percent: 0, error: null };
+
+ipcMain.handle("updates:check", async () => {
+  if (!updater) return { status: "unsupported" };
+  updateState = { status: "checking", info: null, percent: 0, error: null };
+  updater.checkForUpdates().catch((e) => {
+    updateState = { status: "error", error: String(e), percent: 0, info: null };
+  });
+  return updateState;
 });
 
-// Optional auto-updater: only wired when electron-updater is installed.
+ipcMain.handle("updates:state", async () => updateState);
+
+ipcMain.handle("updates:install", async () => {
+  if (updater && updateState.status === "downloaded") {
+    setImmediate(() => updater.quitAndInstall());
+    return { ok: true };
+  }
+  return { ok: false };
+});
+
+// Wire electron-updater (only in a packaged build). Auto-downloads when an
+// update is found; the renderer polls updates:state to show a dot + button.
 function setupAutoUpdater() {
   if (!app.isPackaged) return;
   try {
     const { autoUpdater } = require("electron-updater");
     updater = autoUpdater;
-    updater.checkForUpdatesAndNotify().catch(() => {});
+    updater.autoDownload = true;
+    updater.autoInstallOnAppQuit = true;
+    updater.on("checking-for-update", () => (updateState = { ...updateState, status: "checking" }));
+    updater.on("update-available", (info) => (updateState = { status: "available", info, percent: 0, error: null }));
+    updater.on("update-not-available", () => (updateState = { status: "none", info: null, percent: 0, error: null }));
+    updater.on("download-progress", (p) => (updateState = { status: "downloading", percent: Math.round(p.percent || 0), info: updateState.info, error: null }));
+    updater.on("update-downloaded", (info) => (updateState = { status: "downloaded", info, percent: 100, error: null }));
+    updater.on("error", (e) => (updateState = { status: "error", error: String(e), percent: 0, info: null }));
+    updater.checkForUpdates().catch(() => {}); // silent check at startup
   } catch {
     // electron-updater not bundled — silently skip.
   }

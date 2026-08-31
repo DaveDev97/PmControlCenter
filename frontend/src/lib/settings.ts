@@ -74,22 +74,43 @@ export const settingsApi = {
 };
 
 // ---- Electron IPC bridge (optional; present only in the desktop app) ----
+export type UpdateStatus =
+  | "idle" | "checking" | "available" | "downloading" | "downloaded"
+  | "none" | "error" | "unsupported";
+
+export interface UpdateState {
+  status: UpdateStatus;
+  percent?: number;
+  info?: { version?: string } | null;
+  error?: string | null;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
-      selectFolder: () => Promise<string | null>;
+      selectFile: () => Promise<string | null>;
       getPlatform: () => string;
+      checkForUpdates: () => Promise<UpdateState>;
+      getUpdateState: () => Promise<UpdateState>;
+      installUpdate: () => Promise<{ ok: boolean }>;
     };
   }
 }
 
-/** Open the native folder picker if running under Electron, else return null. */
-export async function pickFolder(): Promise<string | null> {
-  if (typeof window !== "undefined" && window.electronAPI?.selectFolder) {
-    return window.electronAPI.selectFolder();
+/** Open the native Excel-file picker if running under Electron, else null. */
+export async function pickFile(): Promise<string | null> {
+  if (typeof window !== "undefined" && window.electronAPI?.selectFile) {
+    return window.electronAPI.selectFile();
   }
   return null;
 }
 
 export const isElectron = () =>
   typeof window !== "undefined" && Boolean(window.electronAPI);
+
+export const updates = {
+  supported: () => isElectron() && Boolean(window.electronAPI?.getUpdateState),
+  check: () => window.electronAPI?.checkForUpdates() ?? Promise.resolve({ status: "unsupported" as const }),
+  state: () => window.electronAPI?.getUpdateState() ?? Promise.resolve({ status: "unsupported" as const }),
+  install: () => window.electronAPI?.installUpdate() ?? Promise.resolve({ ok: false }),
+};

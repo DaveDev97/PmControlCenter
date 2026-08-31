@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import {
   settingsApi,
-  pickFolder,
+  pickFile,
   isElectron,
   type FolderValidation,
   type ConfigureResult,
@@ -39,7 +39,7 @@ export default function SetupWizard() {
   const [error, setError] = useState<string | null>(null);
 
   async function handleBrowse() {
-    const picked = await pickFolder();
+    const picked = await pickFile();
     if (picked) {
       setFolder(picked);
       setValidation(null);

@@ -44,7 +44,9 @@ class OverlayManager:
     """Manages the ``pm_overlay.json`` file inside the data folder."""
 
     def __init__(self, data_folder: Path | str):
-        self.data_folder = Path(data_folder)
+        p = Path(data_folder)
+        # Accept either the data file or its folder; the overlay lives alongside.
+        self.data_folder = p.parent if p.suffix.lower() == ".xlsx" else p
         self.path = self.data_folder / OVERLAY_FILENAME
 
     # ---------- raw IO ----------

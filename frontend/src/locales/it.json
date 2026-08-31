@@ -40,15 +40,15 @@
     "welcome": {
       "title": "Benvenuto in PM Control Center",
       "body": "Questa applicazione legge i dati di contratti, risorse e opportunità da file Excel condivisi (es. una cartella SharePoint sincronizzata con OneDrive). Nessun server o database è richiesto.",
-      "requirements": "Ti serviranno i file:",
+      "requirements": "Ti servirà il file Excel con i dati (contratti, risorse, opportunità).",
       "start": "Inizia configurazione"
     },
     "folder": {
-      "title": "Seleziona la cartella dati",
-      "body": "Scegli la cartella che contiene i file Excel (security_financials.xlsx).",
+      "title": "Seleziona il file Excel",
+      "body": "Scegli il file Excel con i dati (qualsiasi nome, es. security_financials.xlsx).",
       "browse": "Sfoglia…",
-      "placeholder": "Percorso della cartella dati",
-      "validate": "Verifica cartella"
+      "placeholder": "Percorso del file Excel",
+      "validate": "Verifica file"
     },
     "validation": {
       "title": "Verifica file",
@@ -81,8 +81,8 @@
   },
   "settings": {
     "title": "Impostazioni",
-    "dataFolder": "Cartella dati",
-    "dataFolderHelp": "Cartella condivisa contenente i file Excel.",
+    "dataFolder": "File dati",
+    "dataFolderHelp": "File Excel condiviso con i dati (qualsiasi nome).",
     "change": "Cambia",
     "language": "Lingua",
     "theme": "Tema",
@@ -100,7 +100,17 @@
     "checkUpdates": "Verifica aggiornamenti",
     "chatModel": "Modello AI (Claude Code)",
     "chatModelHelp": "Modello usato dalla chat, tramite Claude Code installato sul tuo PC.",
-    "modelDefault": "Predefinito"
+    "modelDefault": "Predefinito",
+    "updates": "Aggiornamenti",
+    "updatesCheck": "Cerca aggiornamenti",
+    "updateChecking": "Controllo in corso…",
+    "updateNone": "L'app è aggiornata.",
+    "updateAvailable": "Aggiornamento {{v}} trovato, download in corso…",
+    "updateDownloading": "Download {{p}}%…",
+    "updateDownloaded": "Versione {{v}} pronta — riavvia per installare",
+    "updateInstall": "Riavvia e installa",
+    "updateError": "Errore aggiornamento",
+    "updatesUnsupported": "Gli aggiornamenti automatici sono disponibili solo nella versione installata (Setup)."
   },
   "errors": {
     "loadFailed": "Impossibile caricare i dati",

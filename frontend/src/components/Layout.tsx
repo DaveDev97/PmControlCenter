@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { setLanguage, type Language } from "../lib/i18n";
+import { updates } from "../lib/settings";
 
 const nav = [
   { to: "/", labelKey: "nav.account", icon: LayoutDashboard, end: true },
@@ -38,19 +39,21 @@ function NavItem({
   icon: Icon,
   end,
   collapsed,
+  badge,
 }: {
   to: string;
   label: string;
   icon: LucideIcon;
   end?: boolean;
   collapsed: boolean;
+  badge?: boolean;
 }) {
   return (
     <NavLink
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex items-center ${collapsed ? "justify-center" : "gap-3"} rounded-lg px-3 py-2 text-sm font-medium transition ${
+        `relative flex items-center ${collapsed ? "justify-center" : "gap-3"} rounded-lg px-3 py-2 text-sm font-medium transition ${
           isActive
             ? "bg-brand-400 text-white shadow"
             : "text-slate-600 hover:bg-brand-50 hover:text-brand-700 dark:text-slate-300 dark:hover:bg-slate-700"
@@ -58,8 +61,16 @@ function NavItem({
       }
       title={collapsed ? label : undefined}
     >
-      <Icon size={18} />
+      <span className="relative">
+        <Icon size={18} />
+        {badge && (
+          <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800" />
+        )}
+      </span>
       {!collapsed && <span>{label}</span>}
+      {badge && !collapsed && (
+        <span className="ml-auto h-2 w-2 rounded-full bg-red-500" />
+      )}
     </NavLink>
   );
 }
@@ -67,6 +78,20 @@ function NavItem({
 export default function Layout() {
   const { t, i18n } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+
+  // Show a notification dot on Settings when an update is available/downloaded.
+  useEffect(() => {
+    if (!updates.supported()) return;
+    const poll = () =>
+      updates
+        .state()
+        .then((s) => setUpdateReady(["available", "downloading", "downloaded"].includes(s.status)))
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, []);
   const [darkMode, setDarkMode] = useState(() => {
     // Check localStorage - default to light theme if not set
     const saved = localStorage.getItem('darkMode');
@@ -142,6 +167,7 @@ export default function Layout() {
             label={t("nav.settings")}
             icon={SettingsIcon}
             collapsed={collapsed}
+            badge={updateReady}
           />
 
           {/* Claude AI Chat */}
@@ -165,7 +191,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className="flex items-center justify-between">
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.9</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.10</div>
             )}
 
             <div className="flex gap-2">

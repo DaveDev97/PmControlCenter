@@ -91,23 +91,51 @@ def _d(v) -> date | None:
 class ExcelDataLoader:
     """Loads data from the security-financials workbook into the database."""
 
+    @staticmethod
+    def resolve_workbook(path) -> Path | None:
+        """Resolve the data source to an actual .xlsx file.
+
+        Accepts either the Excel file directly (any name — no constraint) or, for
+        backward compatibility, a folder (uses security_financials.xlsx, else the
+        first .xlsx found).
+        """
+        p = Path(path)
+        if p.is_file():
+            return p
+        if p.is_dir():
+            cand = p / DATA_FILENAME
+            if cand.exists():
+                return cand
+            xlsx = sorted(p.glob("*.xlsx"))
+            return xlsx[0] if xlsx else None
+        return None
+
     def validate_folder(self, data_folder: Path) -> dict:
-        data_folder = Path(data_folder)
-        found, missing = [], []
-        if not data_folder.exists() or not data_folder.is_dir():
-            return {
-                "valid": False,
-                "missing": list(REQUIRED_FILES),
-                "found": [],
-                "optional": [],
-                "error": f"Folder not found: {data_folder}",
-            }
-        for name in REQUIRED_FILES:
-            (found if (data_folder / name).exists() else missing).append(name)
-        return {"valid": not missing, "missing": missing, "found": found, "optional": []}
+        """Validate the selected data source by CONTENT (not by file name)."""
+        wb_path = self.resolve_workbook(data_folder)
+        if wb_path is None:
+            return {"valid": False, "found": [], "missing": ["file Excel"], "optional": [],
+                    "error": f"Nessun file Excel trovato: {data_folder}"}
+        try:
+            wb = openpyxl.load_workbook(wb_path, read_only=True, data_only=True)
+            titles = {t.lower() for t in wb.sheetnames}
+            wb.close()
+        except Exception as exc:  # noqa: BLE001 - report any open error to the user
+            return {"valid": False, "found": [wb_path.name], "missing": [], "optional": [],
+                    "error": f"Impossibile aprire il file: {exc}"}
+        looks_valid = ("contracts" in titles or any(t.startswith("opp.") for t in titles)
+                       or any("forecast" in t for t in titles))
+        if not looks_valid:
+            return {"valid": False, "found": [wb_path.name], "missing": [], "optional": [],
+                    "error": "Il file non sembra un workbook PM Control Center "
+                             "(mancano i fogli Contracts / Opp. / Forecast)."}
+        return {"valid": True, "found": [wb_path.name], "missing": [], "optional": [], "path": str(wb_path)}
 
     async def load_all(self, data_folder: Path, session: AsyncSession) -> dict:
-        wb = openpyxl.load_workbook(Path(data_folder) / DATA_FILENAME, data_only=True, read_only=True)
+        wb_path = self.resolve_workbook(data_folder)
+        if wb_path is None:
+            raise FileNotFoundError(f"No Excel file at {data_folder}")
+        wb = openpyxl.load_workbook(wb_path, data_only=True, read_only=True)
         counts = {k: 0 for k in
                   ("clients", "contracts", "financials", "resources", "allocations", "opportunities")}
 
