@@ -139,3 +139,33 @@ export function ErrorBox({ error }: { error: unknown }) {
     </div>
   );
 }
+
+/** %Charg allocation badge: green <= 80%, yellow 80-100%, red > 100% (over-allocation). */
+export function AllocationBadge({ value }: { value: number | null | undefined }) {
+  if (value == null) {
+    return (
+      <span className="inline-block rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">
+        %Charg n/d
+      </span>
+    );
+  }
+  const status = value > 1 ? "bad" : value > 0.8 ? "warning" : "good";
+  const label = value > 1 ? "sovrallocata" : value > 0.8 ? "piena" : "ok";
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${statusColor[status]}`}>
+      {statusDot[status]} {(value * 100).toLocaleString("it-IT", { maximumFractionDigits: 1 })}% · {label}
+    </span>
+  );
+}
+
+/** "Dati al …" badge: when the Excel data was last loaded. */
+export function DataAsOfBadge({ lastSync }: { lastSync: string | null | undefined }) {
+  if (!lastSync) return null;
+  const d = new Date(lastSync);
+  return (
+    <span className="inline-block rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
+          title="Ultimo caricamento del file Excel">
+      Dati al {d.toLocaleDateString("it-IT")} {d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+    </span>
+  );
+}

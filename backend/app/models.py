@@ -90,6 +90,9 @@ class Opportunity(Base):
     estimated_value: Mapped[float] = mapped_column(Float, default=0.0)
     probability: Mapped[float] = mapped_column(Float, default=0.0)  # 0..1
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Where the row lives in the workbook, for surgical write-back.
+    source_sheet: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_row: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     contract: Mapped[Contract | None] = relationship(back_populates="opportunities")
@@ -123,6 +126,7 @@ class Resource(Base):
     loaded_cost_hourly: Mapped[float | None] = mapped_column(Float, nullable=True)  # Full cost/hour from MME
     chargeability: Mapped[float] = mapped_column(Float, default=0.80)  # % billable (default 80%)
     chargeability_notes: Mapped[str | None] = mapped_column(String, nullable=True)  # e.g. "80% BNL, 20% Mooney"
+    perc_charg: Mapped[float | None] = mapped_column(Float, nullable=True)  # %Charg as in Excel (None = not set)
     status: Mapped[str] = mapped_column(String, default="active")  # active, inactive
     hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -287,3 +291,22 @@ class Invoice(Base):
 
     opportunity: Mapped[Opportunity | None] = relationship(back_populates="invoices")
     contract: Mapped[Contract | None] = relationship(back_populates="invoices")
+
+
+class BDItem(Base):
+    """Business Development budget line from the ``BD`` sheet."""
+
+    __tablename__ = "bd_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    cliente: Mapped[str | None] = mapped_column(String, nullable=True)
+    opp_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    opp_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    wbs_bd: Mapped[str | None] = mapped_column(String, nullable=True)
+    totale: Mapped[float] = mapped_column(Float, default=0.0)
+    consumato: Mapped[float] = mapped_column(Float, default=0.0)
+    delta: Mapped[float] = mapped_column(Float, default=0.0)  # as in Excel (Totale - Consumato)
+    perc_utilizzo: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    note_extra: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_row: Mapped[int | None] = mapped_column(Integer, nullable=True)

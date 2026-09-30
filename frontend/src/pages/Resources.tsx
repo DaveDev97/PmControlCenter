@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import type { Resource, Role } from "../lib/types";
-import { Card, Loading, ErrorBox } from "../components/ui";
+import { Card, Loading, ErrorBox, AllocationBadge } from "../components/ui";
 import { fmtEur } from "../lib/format";
 
 export default function Resources() {
@@ -107,6 +107,7 @@ export default function Resources() {
               <th className="py-2">Nome</th>
               <th>Ruolo</th>
               <th>Email</th>
+              <th>Allocazione</th>
               <th className="text-right">Tariffa/gg</th>
               <th>Stato</th>
             </tr>
@@ -121,6 +122,7 @@ export default function Resources() {
                 <td className="py-2 font-medium text-brand-700">{r.name}</td>
                 <td>{r.role_name || "-"}</td>
                 <td className="text-slate-500 dark:text-slate-400">{r.email || "-"}</td>
+                <td><AllocationBadge value={r.perc_charg} /></td>
                 <td className="text-right">{fmtEur(r.daily_rate)}</td>
                 <td>{r.status}</td>
               </tr>

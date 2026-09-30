@@ -40,6 +40,9 @@ export interface Opportunity {
   estimated_value: number;
   probability: number;
   notes?: string | null;
+  total_invoiced?: number;
+  total_to_invoice?: number;
+  source_sheet?: string | null;
 }
 
 export interface Role {
@@ -58,6 +61,8 @@ export interface Resource {
   status: string;
   hire_date?: string | null;
   role_name?: string | null;
+  loaded_cost_hourly?: number | null;
+  perc_charg?: number | null;
 }
 
 export interface Allocation {
@@ -256,4 +261,98 @@ export interface CostBalanceProposal {
   ci_pct_current: number;
   ci_pct_proposed: number;
   reason: string;
+}
+
+// ---------- Cost Space bookato ----------
+export interface CostSpaceBucket {
+  booked_revenue: number;
+  pipeline_revenue: number;
+  booked_count: number;
+  pipeline_count: number;
+  booked_cost_space: number;
+  pipeline_cost_space: number;
+  delta_cost_space: number;
+}
+
+export interface BookedCostSpace {
+  ratio: number;
+  cci_target: number;
+  fys: string[] | null;
+  totals: CostSpaceBucket;
+  by_fy: (CostSpaceBucket & { fy: string })[];
+  booked: { id: number; name: string; fy: string; mms_status: string | null; revenues: number; cost_space: number }[];
+  excel_wbs: { label: string; available: number | null; total: number | null }[];
+}
+
+// ---------- BD Tracking ----------
+export type BDState = "Attivo" | "Chiuso" | "Sconosciuto";
+
+export interface BDRow {
+  id: number;
+  cliente: string | null;
+  bd_opp: string | null;
+  opp_id: string | null;
+  wbs_bd: string | null;
+  stop_utilizzo: boolean;
+  totale: number;
+  consumato: number;
+  residuo: number;
+  perc_utilizzo: number | null;
+  note: string | null;
+  note_extra: string | null;
+  opportunity_id: number | null;
+  linked_by: "oppid" | "nome" | null;
+  opp_name: string;
+  opp_fy: string | null;
+  mms_status: string | null;
+  stato: BDState;
+  stato_motivo: string;
+  monitor: boolean;
+}
+
+export interface BDOverview {
+  rows: BDRow[];
+  summary: Record<BDState, { count: number; totale: number; consumato: number; residuo: number }>;
+}
+
+// ---------- CCI ----------
+export interface CciPoint {
+  revenue: number;
+  total_cost: number;
+  cci: number;
+  cci_pct: number | null;
+}
+
+export interface CciSnapshotValues {
+  revenue: number | null;
+  total_cost: number | null;
+  cci_pct: number | null;
+}
+
+export interface CciRecovery {
+  gap_pct: number | null;
+  gap_eur: number | null;
+  remaining_months: number;
+  leva_ricavi: number | null;
+  leva_costi: number | null;
+}
+
+export interface CciContract {
+  id: string;
+  description: string;
+  wbs: string | null;
+  client: string | null;
+  months: (CciPoint & { month: string; tipo: "actual" | "forecast" })[];
+  aggregates: (CciPoint & { label: string })[];
+  snapshot: { client: string; actual: CciSnapshotValues | null; forecast: CciSnapshotValues | null } | null;
+  recovery: CciRecovery & { fy: string; revenue: number; total_cost: number; cci_pct: number | null; below_target: boolean };
+  recovery_snapshot: CciRecovery | null;
+  alerts: ("actual" | "forecast" | "fy")[];
+}
+
+export interface CciOverview {
+  available: boolean;
+  target: number;
+  contracts: CciContract[];
+  snapshot: { quarter: string | null; spazio_costi_guadagnato: number | null } | null;
 }

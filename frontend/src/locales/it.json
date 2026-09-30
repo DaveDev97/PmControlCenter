@@ -12,6 +12,8 @@
     "resources": "Risorse",
     "costBalancer": "Cost Balancer",
     "costSpace": "Cost Space",
+    "cci": "CCI Contratti",
+    "bd": "BD Tracking",
     "timeReports": "Time Reports",
     "aiChat": "Claude AI Chat",
     "settings": "Impostazioni"

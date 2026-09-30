@@ -17,6 +17,8 @@ import OpportunityDetail from "./pages/OpportunityDetail";
 import Resources from "./pages/Resources";
 import CostBalancer from "./pages/CostBalancer";
 import CostSpaceMonitor from "./pages/CostSpaceMonitor";
+import BDTracking from "./pages/BDTracking";
+import CCIMonitor from "./pages/CCIMonitor";
 import TimeReportGenerator from "./pages/TimeReportGenerator";
 import AIChatPage from "./pages/AIChatPage";
 import SetupWizard from "./pages/SetupWizard";
@@ -76,6 +78,8 @@ const router = createHashRouter([
       { path: "person/:id", element: <PersonDashboard /> },
       { path: "cost-balancer", element: <CostBalancer /> },
       { path: "cost-space", element: <CostSpaceMonitor /> },
+      { path: "bd", element: <BDTracking /> },
+      { path: "cci", element: <CCIMonitor /> },
       { path: "time-reports", element: <TimeReportGenerator /> },
       { path: "ai-chat", element: <AIChatPage /> },
       { path: "settings", element: <SettingsPage /> },

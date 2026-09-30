@@ -17,6 +17,8 @@ import {
   Sun,
   Settings as SettingsIcon,
   Languages,
+  Briefcase,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { setLanguage, type Language } from "../lib/i18n";
@@ -30,6 +32,8 @@ const nav = [
   { to: "/resources", labelKey: "nav.resources", icon: UserCircle },
   { to: "/cost-balancer", labelKey: "nav.costBalancer", icon: TrendingUp },
   { to: "/cost-space", labelKey: "nav.costSpace", icon: BarChart3 },
+  { to: "/cci", labelKey: "nav.cci", icon: Gauge },
+  { to: "/bd", labelKey: "nav.bd", icon: Briefcase },
   { to: "/time-reports", labelKey: "nav.timeReports", icon: Clock },
 ];
 
@@ -191,7 +195,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className={`flex ${collapsed ? "flex-col items-center gap-2" : "items-center justify-between"}`}>
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.14</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.15</div>
             )}
 
             <div className={`flex gap-2 ${collapsed ? "flex-col" : ""}`}>

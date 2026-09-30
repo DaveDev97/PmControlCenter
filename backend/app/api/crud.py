@@ -1,5 +1,6 @@
 """CRUD endpoints for clients, contracts, opportunities, resources, allocations."""
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -30,6 +31,10 @@ from app.schemas import (
     ResourceUpdate,
     RoleOut,
 )
+from app.services.excel_reader import mms_to_stage
+from app.services.opp_writeback import EDITABLE_COLUMNS, write_opportunity_fields
+from app.services.workbook_cache import current_workbook
+from app.services.xlsx_patch import WorkbookLockedError
 
 router = APIRouter(prefix="/api", tags=["crud"])
 
@@ -153,7 +158,27 @@ async def update_opportunity(
     o = await session.get(Opportunity, opp_id)
     if o is None:
         raise HTTPException(404, "Opportunity not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    for k in EDITABLE_COLUMNS:
+        if k in changes and isinstance(changes[k], str):
+            changes[k] = changes[k].strip() or None
+    # MMS Status / Stato ACN Tool are written to the Excel file first: if that
+    # fails (file open in Excel, row not found) nothing changes in the app.
+    excel_changes = {k: changes[k] for k in EDITABLE_COLUMNS
+                     if k in changes and changes[k] != getattr(o, k)}
+    if excel_changes and o.source_sheet:
+        wb_path = current_workbook()
+        if wb_path is None or not wb_path.exists():
+            raise HTTPException(409, "File Excel non disponibile: impossibile salvare la modifica")
+        try:
+            await run_in_threadpool(write_opportunity_fields, wb_path, o, excel_changes)
+        except WorkbookLockedError as exc:
+            raise HTTPException(423, str(exc)) from exc
+        except (LookupError, KeyError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+    if "mms_status" in changes and "stage" not in changes:
+        changes["stage"] = mms_to_stage(changes["mms_status"])
+    for k, v in changes.items():
         setattr(o, k, v)
     await session.commit()
     await session.refresh(o)

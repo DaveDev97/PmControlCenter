@@ -9,7 +9,8 @@ Only the sheets the application needs are parsed:
 
 * ``Contracts``          -> Contracts + monthly Financials (per-contract blocks)
 * ``Costi vs Forecast``  -> Resources (loaded cost, chargeability) + Allocations
-* ``Opp. FY25/26/27``    -> Opportunities
+* ``Opp. FY25/26/27``    -> Opportunities (FY taken from the sheet name)
+* ``BD``                 -> BD budget lines, joined to opportunities via OppID
 
 Sheets are located by tolerant name matching so anonymized titles (which may
 rename embedded client tokens) still resolve.
@@ -17,14 +18,17 @@ rename embedded client tokens) still resolve.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Allocation,
+    BDItem,
     Client,
     Contract,
     Financial,
@@ -50,6 +54,9 @@ _METRIC_MAP = {
     "capital charges": "capital_charges",
 }
 _BACKFILL_MONTH = date(2026, 1, 1)  # "Previous" cumulative parked here for YTD realism
+# Labels in the "Costi vs Forecast" resource table that are cost/summary lines, not people.
+_NON_RESOURCE_PREFIXES = ("spazio costi", "sum ", "wbs ", "unicredit", "tot ", "totale",
+                          "booking", "opp in attesa")
 
 
 # --------------------------------------------------------------------------- #
@@ -70,6 +77,39 @@ def _f(v, default: float = 0.0) -> float:
         return float(v)
     except (TypeError, ValueError):
         return default
+
+
+def norm_opp_id(v) -> str | None:
+    """Normalise an MMS Opp ID for joins: '0012158442', 12158442 and '12158442 ' match."""
+    if _is_blank(v):
+        return None
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    s = str(v).strip()
+    if s.endswith(".0") and s[:-2].isdigit():
+        s = s[:-2]
+    return s.lstrip("0") or s or None
+
+
+def mms_to_stage(mms: str | None) -> str:
+    """Map the raw MMS Status of the Opp sheets to the internal workflow stage."""
+    m = (mms or "").strip().lower()
+    if "closewon" in m or "won" in m:
+        return "CloseWon"
+    if "lost" in m:
+        return "CloseLost"
+    if "proposal" in m or m == "3b":
+        return "Proposal"
+    if "qualif" in m or m in ("1", "3"):
+        return "Qualified"
+    return "Lead"
+
+
+def fy_label(fiscal_year: str | None) -> str | None:
+    """'2026' -> 'FY26' (Opportunity.fiscal_year stores the 4-digit year)."""
+    if not fiscal_year:
+        return None
+    return f"FY{str(fiscal_year)[-2:]}"
 
 
 def _d(v) -> date | None:
@@ -137,11 +177,18 @@ class ExcelDataLoader:
             raise FileNotFoundError(f"No Excel file at {data_folder}")
         wb = openpyxl.load_workbook(wb_path, data_only=True, read_only=True)
         counts = {k: 0 for k in
-                  ("clients", "contracts", "financials", "resources", "allocations", "opportunities")}
-
-        contract_ids = await self._load_contracts(wb, session, counts)
-        await self._load_resources_and_allocations(wb, session, counts, contract_ids)
-        await self._load_opportunities(wb, session, counts, contract_ids)
+                  ("clients", "contracts", "financials", "resources", "allocations",
+                   "opportunities", "bd_items")}
+        try:
+            contract_ids = await self._load_contracts(wb, session, counts)
+            await self._load_resources_and_allocations(wb, session, counts, contract_ids)
+            opps = await self._load_opportunities(wb, session, counts, contract_ids)
+            bd_rows = await self._load_bd(wb, session, counts)
+        finally:
+            # read_only keeps the file handle open until closed: without this the
+            # workbook stays locked (Excel cannot save it, write-back cannot replace it).
+            wb.close()
+        await self._refine_client_names(session, opps, bd_rows)
 
         await session.commit()
         return counts
@@ -290,17 +337,30 @@ class ExcelDataLoader:
         seen: set[str] = set()
         for row in rows[hdr_idx + 1:]:
             name = _s(row[res_col]) if res_col < len(row) else None
-            if not name or "." not in name:
+            if not name:
                 continue
-            if name in seen:
+            low = name.lower()
+            if low.startswith("sum costi"):
+                break  # end of the resource table; cost-space summary blocks follow
+            if low.startswith(_NON_RESOURCE_PREFIXES) or name in seen:
+                continue
+            raw_lc = row[lc_col] if lc_col is not None and lc_col < len(row) else None
+            raw_charg = row[charg_col] if charg_col is not None and charg_col < len(row) else None
+            has_charg = isinstance(raw_charg, (int, float)) and not _is_blank(raw_charg)
+            # A person has an hourly LC plus a %Charg or a "name.surname" id; lines
+            # like "Unicredit 20342" or "PMO Account 10578" are cost buckets.
+            if not isinstance(raw_lc, (int, float)) or not 0 < raw_lc < 1000:
+                continue
+            if not has_charg and "." not in name:
                 continue
             seen.add(name)
-            lc = _f(row[lc_col]) if lc_col is not None and lc_col < len(row) else 0.0
-            charg = _f(row[charg_col], 0.80) if charg_col is not None and charg_col < len(row) else 0.80
+            lc = float(raw_lc)
+            perc = float(raw_charg) if has_charg else None
+            charg = perc if perc is not None else 0.80
             res = Resource(
-                name=name, email=f"{name}@example.com",
-                daily_rate=round(lc * 8, 2), loaded_cost_hourly=lc or None,
-                chargeability=charg, status="active",
+                name=name, email=f"{name}@example.com" if "." in name else None,
+                daily_rate=round(lc * 8, 2), loaded_cost_hourly=lc,
+                chargeability=charg, perc_charg=perc, status="active",
             )
             session.add(res)
             await session.flush()
@@ -313,12 +373,15 @@ class ExcelDataLoader:
                 ))
                 counts["allocations"] += 1
 
-    async def _load_opportunities(self, wb, session, counts, contract_ids):
+    async def _load_opportunities(self, wb, session, counts, contract_ids) -> list[Opportunity]:
+        """Merge the three ``Opp. FYxx`` sheets, tagging each row with its sheet's FY."""
+        loaded: list[Opportunity] = []
         for title in wb.sheetnames:
             if not title.lower().startswith("opp."):
                 continue
             ws = wb[title]
-            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+            # Explicit origin so list indexes map 1:1 to Excel rows/columns.
+            rows = [list(r) for r in ws.iter_rows(min_row=1, min_col=1, values_only=True)]
             # Header row = the one containing "Contract".
             hdr_idx = None
             for ri, row in enumerate(rows[:5]):
@@ -336,7 +399,8 @@ class ExcelDataLoader:
                         return row[ci]
                 return None
 
-            for row in rows[hdr_idx + 1:]:
+            ccp_col = next((k for k in cols if k.endswith("contract (ccp)")), None)
+            for ri, row in enumerate(rows[hdr_idx + 1:], start=hdr_idx + 2):
                 name = _s(g(row, "project"))
                 opp_id = _s(g(row, "opp id mms"))
                 if not name and not opp_id:
@@ -344,9 +408,9 @@ class ExcelDataLoader:
                 cid = _s(g(row, "contract"))
                 if cid not in contract_ids:
                     cid = None
-                mms = _s(g(row, "mms status")) or "Lead"
-                stage = self._stage(mms)
-                session.add(Opportunity(
+                mms = _s(g(row, "mms status"))  # raw value: CloseWon / 3B / 1 / 0 / blank
+                stage = mms_to_stage(mms)
+                opp = Opportunity(
                     opp_id_mms=opp_id, contract_id=cid, name=name or (opp_id or "Opportunity"),
                     legal_entity=None, fiscal_year=self._fy(title),
                     close_date=_d(g(row, "close date")),
@@ -355,7 +419,7 @@ class ExcelDataLoader:
                     acn_tool_status=_s(g(row, "stato acn tool")),
                     mms_status=mms, stage=stage,
                     oda_id=_s(g(row, "oda id")),
-                    ccp_number=_s(g(row, "alphabank contract (ccp)", "bnl contract (ccp)")),
+                    ccp_number=_s(g(row, ccp_col)) if ccp_col else None,
                     referente=_s(g(row, "ref name")),
                     mmr_code=_s(g(row, "mmr code")),
                     estimated_value=_f(g(row, "revenues")),
@@ -363,21 +427,102 @@ class ExcelDataLoader:
                     total_to_invoice=_f(g(row, "to be billed")),
                     probability=1.0 if stage == "CloseWon" else (0.5 if stage == "Proposal" else 0.3),
                     notes=_s(g(row, "note")),
-                ))
+                    source_sheet=title, source_row=ri,
+                )
+                session.add(opp)
+                loaded.append(opp)
                 counts["opportunities"] += 1
+        return loaded
+
+    async def _load_bd(self, wb, session, counts) -> list[BDItem]:
+        """Load the ``BD`` sheet (its header row contains 'Cliente' and 'OppID')."""
+        ws = self._sheet(wb, lambda t: t == "bd")
+        if ws is None:
+            return []
+        rows = [list(r) for r in ws.iter_rows(min_row=1, min_col=1, values_only=True)]
+        hdr_idx = None
+        for ri, row in enumerate(rows[:10]):
+            labels = {(_s(v) or "").lower() for v in row}
+            if "cliente" in labels and "oppid" in labels:
+                hdr_idx = ri
+                break
+        if hdr_idx is None:
+            return []
+        cols: dict[str, int] = {}
+        for ci, v in enumerate(rows[hdr_idx]):
+            key = _s(v)
+            if key and key not in cols:  # "Note" and "NOTE" are distinct columns
+                cols[key] = ci
+
+        def g(row, name):
+            ci = cols.get(name)
+            return row[ci] if ci is not None and ci < len(row) else None
+
+        items: list[BDItem] = []
+        for ri, row in enumerate(rows[hdr_idx + 1:], start=hdr_idx + 2):
+            cliente, opp = _s(g(row, "Cliente")), _s(g(row, "Opp"))
+            totale = g(row, "Totale")
+            if not cliente and not opp and _is_blank(totale):
+                continue
+            perc = g(row, "% di utilizzo")
+            item = BDItem(
+                cliente=cliente, opp_name=opp, opp_id=norm_opp_id(g(row, "OppID")),
+                wbs_bd=_s(g(row, "WBS BD")), totale=_f(totale),
+                consumato=_f(g(row, "Consumato")), delta=_f(g(row, "Delta")),
+                perc_utilizzo=float(perc) if isinstance(perc, (int, float)) else None,
+                note=_s(g(row, "Note")), note_extra=_s(g(row, "NOTE")), source_row=ri,
+            )
+            session.add(item)
+            items.append(item)
+            counts["bd_items"] += 1
+        return items
+
+    async def _refine_client_names(self, session, opps, bd_rows) -> None:
+        """Name each contract's client after the BD 'Cliente' of its opportunities.
+
+        The Contracts sheet has no client column (the name heuristic turns
+        "Supporto in ambito logon" into client "Supporto"). BD rows carry the
+        client and join to opportunities, which carry the contract, so a
+        majority vote per contract gives the real client name.
+        """
+        contract_by_opp = {norm_opp_id(o.opp_id_mms): o.contract_id for o in opps
+                           if o.opp_id_mms and o.contract_id}
+        votes: dict[str, Counter] = {}
+        for b in bd_rows:
+            cid = contract_by_opp.get(b.opp_id) if b.opp_id else None
+            if cid and b.cliente:
+                votes.setdefault(cid, Counter())[b.cliente.strip()] += 1
+        if not votes:
+            return
+
+        clients = {c.name: c for c in (await session.scalars(select(Client))).all()}
+        contracts = (await session.scalars(select(Contract))).all()
+        users = Counter(c.client_id for c in contracts)
+        for contract in contracts:
+            if contract.id not in votes:
+                continue
+            name = votes[contract.id].most_common(1)[0][0]
+            target = clients.get(name)
+            if target is None:
+                current = await session.get(Client, contract.client_id)
+                if current is not None and users[current.id] == 1:
+                    # Sole user of a heuristic client: just rename it.
+                    del clients[current.name]
+                    current.name = name
+                    clients[name] = current
+                    continue
+                target = Client(name=name, industry="Financial Services")
+                session.add(target)
+                await session.flush()
+                clients[name] = target
+            users[contract.client_id] -= 1
+            users[target.id] += 1
+            contract.client_id = target.id
+        await session.flush()
 
     @staticmethod
     def _stage(mms: str) -> str:
-        m = (mms or "").lower()
-        if "closewon" in m or "won" in m:
-            return "CloseWon"
-        if "lost" in m:
-            return "CloseLost"
-        if "proposal" in m or m == "3b":
-            return "Proposal"
-        if "qualif" in m or m in ("1", "3"):
-            return "Qualified"
-        return "Lead"
+        return mms_to_stage(mms)
 
     @staticmethod
     def _fy(title: str) -> str:

@@ -1,14 +1,55 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
 import { api } from "../lib/api";
 import type { Contract, Opportunity } from "../lib/types";
-import { Card, Loading, ErrorBox, StatusBadge } from "../components/ui";
+import { Card, Loading, ErrorBox, DataAsOfBadge } from "../components/ui";
 import { fmtEur } from "../lib/format";
+import { settingsApi } from "../lib/settings";
 import { useSort, SortTh } from "../lib/useTable";
 
 const STAGES = ["Lead", "Qualified", "Proposal", "CloseWon", "CloseLost"];
+// Values used in the Opp sheets. "" = empty cell.
+const MMS_STATUSES = ["CloseWon", "3B", "1", "0", ""];
+const ACN_STATUSES = ["Done", "Da Fatturare", "MMS", ""];
+const FYS = ["FY25", "FY26", "FY27"];
+const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
+
+const fyOf = (o: Opportunity) => (o.fiscal_year ? `FY${o.fiscal_year.slice(-2)}` : "-");
+
+/** Inline select for an Excel-backed field; keeps unknown current values selectable. */
+function CellSelect({
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  value: string | null | undefined;
+  options: string[];
+  disabled?: boolean;
+  onChange: (v: string) => void;
+}) {
+  const current = value ?? "";
+  const opts = options.includes(current) ? options : [current, ...options];
+  return (
+    <select
+      value={current}
+      disabled={disabled}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        e.stopPropagation();
+        onChange(e.target.value);
+      }}
+      className="rounded border border-slate-200 bg-white px-2 py-1 text-xs disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+    >
+      {opts.map((o) => (
+        <option key={o || "empty"} value={o}>
+          {o || "(vuoto)"}
+        </option>
+      ))}
+    </select>
+  );
+}
 const LEGAL_ENTITIES = [
   "BNL S.p.A.",
   "Mooney S.p.A.",
@@ -21,8 +62,10 @@ export default function Opportunities() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [fyFilter, setFyFilter] = useState<string>("all");
+  const [quarterFilter, setQuarterFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
     contract_id: "",
@@ -41,6 +84,7 @@ export default function Opportunities() {
     queryKey: ["contracts"],
     queryFn: () => api.get<Contract[]>("/api/contracts"),
   });
+  const { data: status } = useQuery({ queryKey: ["data-status-badge"], queryFn: settingsApi.status });
 
   const create = useMutation({
     mutationFn: (body: typeof form) =>
@@ -57,10 +101,17 @@ export default function Opportunities() {
     },
   });
 
-  const updateStage = useMutation({
-    mutationFn: ({ id, stage }: { id: number; stage: string }) =>
-      api.put<Opportunity>(`/api/opportunities/${id}`, { stage }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["opportunities"] }),
+  // MMS Status / Stato ACN Tool are written straight into the Excel file.
+  const updateField = useMutation({
+    mutationFn: ({ id, field, value }: { id: number; field: "mms_status" | "acn_tool_status"; value: string }) =>
+      api.put<Opportunity>(`/api/opportunities/${id}`, { [field]: value }),
+    onMutate: () => setSaveError(null),
+    onError: (e) => setSaveError(e instanceof Error ? e.message.replace(/^\d+: /, "") : String(e)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["opportunities"] });
+      qc.invalidateQueries({ queryKey: ["cost-space-booked"] });
+      qc.invalidateQueries({ queryKey: ["bd"] });
+    },
   });
 
   const remove = useMutation({
@@ -68,32 +119,19 @@ export default function Opportunities() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["opportunities"] }),
   });
 
-  const [syncing, setSyncing] = useState(false);
-  const syncToExcel = async () => {
-    setSyncing(true);
-    try {
-      const base = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || "";
-      const res = await fetch(`${base}/api/excel/sync`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      alert(`✓ Dati sincronizzati su Excel: ${data.counts.opportunities} opportunità aggiornate`);
-    } catch (e) {
-      alert("Errore nella sincronizzazione: " + (e instanceof Error ? e.message : String(e)));
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const accessors = {
     name: (o: Opportunity) => o.name,
+    fy: (o: Opportunity) => o.fiscal_year,
     contract: (o: Opportunity) => o.contract_id,
     quarter: (o: Opportunity) => o.quarter,
     value: (o: Opportunity) => o.estimated_value,
-    stage: (o: Opportunity) => o.stage,
+    mms: (o: Opportunity) => o.mms_status,
+    acn: (o: Opportunity) => o.acn_tool_status,
   };
   const filtered = (data || []).filter(
     (o) =>
-      (stageFilter === "all" || o.stage === stageFilter) &&
+      (fyFilter === "all" || fyOf(o) === fyFilter) &&
+      (quarterFilter === "all" || o.quarter === quarterFilter) &&
       (search === "" || (o.name || "").toLowerCase().includes(search.toLowerCase())),
   );
   const { sorted, sortKey, dir, toggle } = useSort(filtered, accessors, "value", "desc");
@@ -107,21 +145,16 @@ export default function Opportunities() {
     <div className="p-6">
       <header className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Opportunità</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Opportunità</h1>
+            <DataAsOfBadge lastSync={status?.last_sync} />
+          </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {filtered.length} di {data?.length || 0} opportunità · pipeline {fmtEur(total)}
+            {filtered.length} di {data?.length || 0} opportunità · valore {fmtEur(total)} · MMS Status e
+            Stato ACN Tool si salvano direttamente sul file Excel
           </p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={syncToExcel}
-            disabled={syncing}
-            className="flex items-center gap-2 rounded-lg border border-brand-400 bg-white px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:bg-slate-800 dark:text-brand-400"
-            title="Sincronizza le modifiche con il file Excel"
-          >
-            <Save size={16} />
-            {syncing ? "Sincronizzazione..." : "Salva su Excel"}
-          </button>
           <button
             onClick={() => setShowForm((s) => !s)}
             className="rounded-lg bg-brand-400 px-4 py-2 text-sm font-medium text-slate-800 dark:text-white hover:bg-brand-500"
@@ -209,7 +242,7 @@ export default function Opportunities() {
         </Card>
       )}
 
-      {/* Filters */}
+      {/* Filters: FY = sheet of origin, Quarter = Close Date Quarter */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           value={search}
@@ -217,40 +250,53 @@ export default function Opportunities() {
           placeholder="Cerca per nome…"
           className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-white"
         />
-        <button
-          onClick={() => setStageFilter("all")}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-            stageFilter === "all"
-              ? "border-brand-500 bg-brand-500 text-white"
-              : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-          }`}
-        >
-          Tutti
-        </button>
-        {STAGES.map((s) => (
+        <span className="ml-2 text-xs font-medium uppercase text-slate-400">FY</span>
+        {[...FYS, "all"].map((fy) => (
           <button
-            key={s}
-            onClick={() => setStageFilter(s)}
+            key={fy}
+            onClick={() => setFyFilter(fy)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-              stageFilter === s
+              fyFilter === fy
                 ? "border-brand-500 bg-brand-500 text-white"
                 : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
             }`}
           >
-            {s}
+            {fy === "all" ? "Tutto" : fy}
+          </button>
+        ))}
+        <span className="ml-2 text-xs font-medium uppercase text-slate-400">Quarter</span>
+        {["all", ...QUARTERS].map((q) => (
+          <button
+            key={q}
+            onClick={() => setQuarterFilter(q)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+              quarterFilter === q
+                ? "border-brand-500 bg-brand-500 text-white"
+                : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            {q === "all" ? "Tutti" : q}
           </button>
         ))}
       </div>
+
+      {saveError && (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+          Modifica non salvata: {saveError}
+        </div>
+      )}
 
       <Card>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-800 text-left text-xs uppercase text-slate-400">
               <SortTh label="Nome" sortKey="name" activeKey={sortKey} dir={dir} onSort={toggle} className="py-2" />
+              <SortTh label="FY" sortKey="fy" activeKey={sortKey} dir={dir} onSort={toggle} className="pr-3" />
               <SortTh label="Contratto" sortKey="contract" activeKey={sortKey} dir={dir} onSort={toggle} />
               <SortTh label="Quarter" sortKey="quarter" activeKey={sortKey} dir={dir} onSort={toggle} />
               <SortTh label="Valore" sortKey="value" activeKey={sortKey} dir={dir} onSort={toggle} className="text-right" />
-              <SortTh label="Stage" sortKey="stage" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortTh label="MMS Status" sortKey="mms" activeKey={sortKey} dir={dir} onSort={toggle} />
+              <SortTh label="Stato ACN Tool" sortKey="acn" activeKey={sortKey} dir={dir} onSort={toggle} />
               <th></th>
             </tr>
           </thead>
@@ -262,23 +308,25 @@ export default function Opportunities() {
                 onClick={() => navigate(`/opportunities/${o.id}`)}
               >
                 <td className="py-2 font-medium text-slate-700 dark:text-slate-200">{o.name}</td>
+                <td className="pr-3">{fyOf(o)}</td>
                 <td>{o.contract_id || "-"}</td>
                 <td>{o.quarter || "-"}</td>
                 <td className="text-right">{fmtEur(o.estimated_value)}</td>
                 <td onClick={(e) => e.stopPropagation()}>
-                  <select
-                    value={o.stage}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      updateStage.mutate({ id: o.id, stage: e.target.value });
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="rounded border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs"
-                  >
-                    {STAGES.map((s) => (
-                      <option  key={s} className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">{s}</option>
-                    ))}
-                  </select>
+                  <CellSelect
+                    value={o.mms_status}
+                    options={MMS_STATUSES}
+                    disabled={!o.source_sheet || updateField.isPending}
+                    onChange={(v) => updateField.mutate({ id: o.id, field: "mms_status", value: v })}
+                  />
+                </td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <CellSelect
+                    value={o.acn_tool_status}
+                    options={ACN_STATUSES}
+                    disabled={!o.source_sheet || updateField.isPending}
+                    onChange={(v) => updateField.mutate({ id: o.id, field: "acn_tool_status", value: v })}
+                  />
                 </td>
                 <td className="text-right">
                   <button

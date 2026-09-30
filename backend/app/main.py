@@ -14,13 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
+    bd,
+    cci,
     chat,
     cost_balancer,
     cost_space,
     crud,
     dashboard,
     due_diligence,
-    excel_sync,
     invoices,
     projects,
     reports,
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="1.0.14", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.15", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,7 +69,8 @@ app.include_router(time_reports.router)
 app.include_router(time_upload.router, prefix="/api/time-upload", tags=["time-upload"])
 app.include_router(invoices.router, prefix="/api/invoices", tags=["invoices"])
 app.include_router(reports.router)
-app.include_router(excel_sync.router)
+app.include_router(bd.router)
+app.include_router(cci.router)
 
 
 @app.get("/api/health", tags=["health"])

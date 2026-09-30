@@ -11,64 +11,45 @@ from app.services import cost_space
 router = APIRouter()
 
 
-class CostSpaceRow(BaseModel):
+class AllocationRow(BaseModel):
     resource_id: int
     resource_name: str
-    chargeability: float
     loaded_cost_hourly: float
-    available_hours: float
-    available_cost_space: float
-    allocated_hours: float
-    allocated_cost_space: float
-    remaining_hours: float
-    remaining_cost_space: float
-    utilization_pct: float
-    status: str
+    perc_charg: float | None
+    charged_hours: float | None
+    monthly_cost: float | None
+    status: str  # ok | high | over | nd
 
 
 class CostSpaceSummary(BaseModel):
     month: str
-    resources: list[CostSpaceRow]
+    resources: list[AllocationRow]
     totals: dict
-
-
-class PipelineImpact(BaseModel):
-    total_pipeline_value: float
-    estimated_cost_space_required: float
-    opportunities_count: int
 
 
 @router.get("/summary", response_model=CostSpaceSummary)
 async def cost_space_summary(
-    month: str = "2026-08",  # Format: YYYY-MM
+    month: str | None = None,  # Format: YYYY-MM (default: current month)
     session: AsyncSession = Depends(get_session),
 ):
-    """Get cost space summary for a given month."""
-    year, month_num = map(int, month.split("-"))
-    month_date = date(year, month_num, 1)
-
-    resources = await cost_space.get_cost_space_summary(month_date, session)
-
-    # Calculate totals
+    """Resource allocation (%Charg from Excel) for a given month."""
+    today = date.today()
+    year, month_num = map(int, month.split("-")) if month else (today.year, today.month)
+    resources = await cost_space.get_cost_space_summary(date(year, month_num, 1), session)
+    known = [r["perc_charg"] for r in resources if r["perc_charg"] is not None]
     totals = {
-        "available_cost_space": sum(r["available_cost_space"] for r in resources),
-        "allocated_cost_space": sum(r["allocated_cost_space"] for r in resources),
-        "remaining_cost_space": sum(r["remaining_cost_space"] for r in resources),
-        "avg_utilization_pct": (
-            sum(r["utilization_pct"] for r in resources) / len(resources)
-            if resources
-            else 0.0
-        ),
+        "monthly_cost": round(sum(r["monthly_cost"] or 0 for r in resources), 2),
+        "avg_perc_charg": round(sum(known) / len(known), 4) if known else None,
+        "over": sum(r["status"] == "over" for r in resources),
+        "high": sum(r["status"] == "high" for r in resources),
+        "ok": sum(r["status"] == "ok" for r in resources),
+        "nd": sum(r["status"] == "nd" for r in resources),
     }
-
-    return {
-        "month": month,
-        "resources": resources,
-        "totals": totals,
-    }
+    return {"month": f"{year:04d}-{month_num:02d}", "resources": resources, "totals": totals}
 
 
-@router.get("/pipeline-impact", response_model=PipelineImpact)
-async def pipeline_impact(session: AsyncSession = Depends(get_session)):
-    """Get pipeline impact on cost space."""
-    return await cost_space.get_pipeline_impact(session)
+@router.get("/booked")
+async def booked_cost_space(fy: str | None = None, session: AsyncSession = Depends(get_session)):
+    """Cost Space bookato (CloseWon + 3B) vs pipeline. ``fy`` = comma list, e.g. "FY26,FY27"."""
+    fys = [f.strip() for f in fy.split(",") if f.strip()] if fy else None
+    return await cost_space.get_booked_cost_space(session, fys)

@@ -1,143 +1,175 @@
-"""Cost Space tracking service per documento operativo.
+"""Cost Space services.
 
-Spazio Costi = ore mensili × chargeability × loaded_cost
-Confronto: disponibile vs allocato vs remaining
+Two distinct views:
+
+* **Cost Space bookato** (opportunity based): the cost budget unlocked by booked
+  work, ``Revenues × (1 - CCI target)`` summed over opportunities whose MMS
+  Status is ``CloseWon`` or ``3B``. The pipeline figure includes every open
+  opportunity, so the delta shows how much depends on unconfirmed deals.
+* **Allocazione risorse** (resource based): the ``%Charg`` of each person as
+  written in the ``Costi vs Forecast`` sheet. Over-allocation means
+  ``%Charg > 100%``; nothing is inferred from synthetic allocations.
 """
+from __future__ import annotations
+
 from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.models import Resource, Allocation, Contract
 from app.core.config import settings
+from app.models import Opportunity, Resource
+from app.services.excel_reader import fy_label
+from app.services.workbook_cache import current_workbook, find_sheet, sheet_values
+
+BOOKED_MMS = {"closewon", "3b"}
+ALLOC_HIGH = 0.80  # > 80% -> yellow
+ALLOC_OVER = 1.00  # > 100% -> red (real over-allocation)
+
+
+def cost_space_ratio() -> float:
+    """Share of revenue available for costs: 1 - CCI target (35% -> 0.65)."""
+    return 1.0 - settings.cci_target_threshold
+
+
+def is_booked(mms_status: str | None) -> bool:
+    return (mms_status or "").strip().lower() in BOOKED_MMS
+
+
+def allocation_status(perc_charg: float | None) -> str:
+    """'ok' (<= 80%), 'high' (80-100%], 'over' (> 100%) or 'nd' when %Charg is missing."""
+    if perc_charg is None:
+        return "nd"
+    if perc_charg > ALLOC_OVER:
+        return "over"
+    if perc_charg > ALLOC_HIGH:
+        return "high"
+    return "ok"
 
 
 def calculate_working_hours_per_month(month: date) -> float:
-    """Calculate billable working hours for a given month (typically ~160 hours = 20 days * 8h)."""
+    """Billable working hours for a month (20 days x 8h)."""
     return settings.working_days_per_month * 8.0
 
 
-async def get_cost_space_summary(
-    month: date, session: AsyncSession
-) -> list[dict]:
-    """Calculate cost space summary for all active resources for a given month.
-
-    Returns list of:
-    {
-        "resource_id": int,
-        "resource_name": str,
-        "chargeability": float,
-        "loaded_cost_hourly": float,
-        "available_hours": float,  # working_hours * chargeability
-        "available_cost_space": float,  # available_hours * loaded_cost
-        "allocated_hours": float,  # sum of allocations
-        "allocated_cost_space": float,  # allocated_hours * loaded_cost
-        "remaining_hours": float,
-        "remaining_cost_space": float,
-        "utilization_pct": float,  # allocated / available
-        "status": str  # "overallocated" | "full" | "partial" | "available"
-    }
-    """
-    # Load all active resources
-    result = await session.execute(
-        select(Resource)
-        .where(Resource.status == "active")
-        .options(selectinload(Resource.allocations))
-    )
-    resources = result.scalars().all()
-
-    summary = []
+async def get_cost_space_summary(month: date, session: AsyncSession) -> list[dict]:
+    """Per-resource allocation from ``%Charg`` plus the monthly cost it implies."""
+    resources = (
+        await session.scalars(select(Resource).where(Resource.status == "active"))
+    ).all()
+    hours = calculate_working_hours_per_month(month)
+    rows = []
     for res in resources:
-        # Calculate available space
-        working_hours = calculate_working_hours_per_month(month)
-        chargeability = res.chargeability if res.chargeability else 0.80  # Default 80%
-        loaded_cost = res.loaded_cost_hourly if res.loaded_cost_hourly else res.daily_rate / 8.0
-
-        available_hours = working_hours * chargeability
-        available_cost_space = available_hours * loaded_cost
-
-        # Calculate allocated space for this month
-        allocated_hours = 0.0
-        for alloc in res.allocations:
-            # Check if allocation is active in this month
-            if alloc.start_date and month < date(alloc.start_date.year, alloc.start_date.month, 1):
-                continue
-            if alloc.end_date and month > date(alloc.end_date.year, alloc.end_date.month, 1):
-                continue
-
-            # Convert days_per_month to hours (1 day = 8 hours)
-            allocated_hours += alloc.days_per_month * 8.0
-
-        allocated_cost_space = allocated_hours * loaded_cost
-
-        # Calculate remaining
-        remaining_hours = available_hours - allocated_hours
-        remaining_cost_space = available_cost_space - allocated_cost_space
-        utilization_pct = (allocated_hours / available_hours) if available_hours > 0 else 0.0
-
-        # Determine status
-        if utilization_pct > 1.0:
-            status = "overallocated"
-        elif utilization_pct >= settings.util_full_threshold:  # >= 80%
-            status = "full"
-        elif utilization_pct >= settings.util_bench_threshold:  # >= 50%
-            status = "partial"
-        else:
-            status = "available"
-
-        summary.append({
+        lc = res.loaded_cost_hourly if res.loaded_cost_hourly else res.daily_rate / 8.0
+        perc = res.perc_charg
+        charged_hours = hours * perc if perc is not None else None
+        rows.append({
             "resource_id": res.id,
             "resource_name": res.name,
-            "chargeability": chargeability,
-            "loaded_cost_hourly": loaded_cost,
-            "available_hours": round(available_hours, 2),
-            "available_cost_space": round(available_cost_space, 2),
-            "allocated_hours": round(allocated_hours, 2),
-            "allocated_cost_space": round(allocated_cost_space, 2),
-            "remaining_hours": round(remaining_hours, 2),
-            "remaining_cost_space": round(remaining_cost_space, 2),
-            "utilization_pct": round(utilization_pct, 4),
-            "status": status,
+            "loaded_cost_hourly": round(lc, 2),
+            "perc_charg": perc,
+            "charged_hours": round(charged_hours, 1) if charged_hours is not None else None,
+            "monthly_cost": round(charged_hours * lc, 2) if charged_hours is not None else None,
+            "status": allocation_status(perc),
         })
-
-    # Sort by status priority (overallocated first, then by name)
-    status_priority = {"overallocated": 0, "full": 1, "partial": 2, "available": 3}
-    summary.sort(key=lambda x: (status_priority.get(x["status"], 999), x["resource_name"]))
-
-    return summary
+    priority = {"over": 0, "high": 1, "ok": 2, "nd": 3}
+    rows.sort(key=lambda r: (priority[r["status"]], r["resource_name"].lower()))
+    return rows
 
 
-async def get_pipeline_impact(session: AsyncSession) -> dict:
-    """Calculate cost space impact of pipeline opportunities.
+async def get_booked_cost_space(session: AsyncSession, fys: list[str] | None = None) -> dict:
+    """Cost Space bookato vs pipeline, optionally restricted to some FYs (e.g. ["FY26", "FY27"])."""
+    ratio = cost_space_ratio()
+    opps = (await session.scalars(select(Opportunity))).all()
+    wanted = {f.upper() for f in fys} if fys else None
 
-    Returns:
-    {
-        "total_pipeline_value": float,
-        "estimated_cost_space_required": float,
-        "opportunities_count": int,
-    }
-    """
-    # Placeholder: in real implementation, sum estimated_value from Opportunity
-    # where stage in ("Qualified", "Proposal") and calculate cost space needed
-    # based on opportunity size and team composition
+    by_fy: dict[str, dict] = {}
+    booked_rows = []
+    totals = {"booked_revenue": 0.0, "pipeline_revenue": 0.0, "booked_count": 0, "pipeline_count": 0}
+    for o in opps:
+        fy = fy_label(o.fiscal_year) or "N/D"
+        if wanted is not None and fy not in wanted:
+            continue
+        if o.stage == "CloseLost":
+            continue
+        value = o.estimated_value or 0.0
+        bucket = by_fy.setdefault(fy, {"fy": fy, "booked_revenue": 0.0, "pipeline_revenue": 0.0,
+                                       "booked_count": 0, "pipeline_count": 0})
+        bucket["pipeline_revenue"] += value
+        bucket["pipeline_count"] += 1
+        totals["pipeline_revenue"] += value
+        totals["pipeline_count"] += 1
+        if is_booked(o.mms_status):
+            bucket["booked_revenue"] += value
+            bucket["booked_count"] += 1
+            totals["booked_revenue"] += value
+            totals["booked_count"] += 1
+            booked_rows.append({
+                "id": o.id, "name": o.name, "fy": fy, "mms_status": o.mms_status,
+                "revenues": round(value, 2), "cost_space": round(value * ratio, 2),
+            })
 
-    from app.models import Opportunity
+    def with_space(d: dict) -> dict:
+        d["booked_cost_space"] = round(d["booked_revenue"] * ratio, 2)
+        d["pipeline_cost_space"] = round(d["pipeline_revenue"] * ratio, 2)
+        d["delta_cost_space"] = round(d["pipeline_cost_space"] - d["booked_cost_space"], 2)
+        d["booked_revenue"] = round(d["booked_revenue"], 2)
+        d["pipeline_revenue"] = round(d["pipeline_revenue"], 2)
+        return d
 
-    result = await session.execute(
-        select(Opportunity).where(
-            Opportunity.stage.in_(["Qualified", "Proposal"])
-        )
-    )
-    opportunities = result.scalars().all()
-
-    total_value = sum(opp.estimated_value for opp in opportunities)
-
-    # Assume 65% of revenue goes to costs (inverse of 35% CI target)
-    estimated_costs = total_value * 0.65
-
+    booked_rows.sort(key=lambda r: -r["revenues"])
     return {
-        "total_pipeline_value": round(total_value, 2),
-        "estimated_cost_space_required": round(estimated_costs, 2),
-        "opportunities_count": len(opportunities),
+        "ratio": round(ratio, 4),
+        "cci_target": settings.cci_target_threshold,
+        "fys": sorted(wanted) if wanted else None,
+        "totals": with_space(totals),
+        "by_fy": [with_space(by_fy[k]) for k in sorted(by_fy)],
+        "booked": booked_rows,
+        "excel_wbs": excel_wbs_cost_space(),
     }
+
+
+def excel_wbs_cost_space() -> list[dict]:
+    """Cost-space rows already computed in ``Costi vs Forecast`` (e.g. "WBS Findo").
+
+    Located below the "Spazio costi già presente" header, whose columns are
+    labelled "Available" and "SpazioCosti Tot". Returned for cross-checking the
+    opportunity-based figure; empty if the block is not found.
+    """
+    path = current_workbook()
+    if path is None or not path.exists():
+        return []
+    try:
+        rows = find_sheet(sheet_values(path), lambda t: "costi vs forecast" in t)
+    except Exception:  # noqa: BLE001 - an unreadable file must not break the page
+        return []
+    if not rows:
+        return []
+    out: list[dict] = []
+    in_block = False
+    avail_col = tot_col = None
+    for row in rows:
+        labels = [str(v).strip().lower() if isinstance(v, str) else None for v in row]
+        if "available" in labels:
+            in_block = True
+            avail_col = labels.index("available")
+            tot_col = next((i for i, v in enumerate(labels) if v and v.startswith("spaziocosti")), None)
+            continue
+        if not in_block:
+            continue
+        name_col = avail_col - 1 if avail_col else None
+        name = row[name_col] if name_col is not None and name_col < len(row) else None
+        if not isinstance(name, str):
+            continue
+        low = name.strip().lower()
+        if low.startswith("sum spazio"):
+            break
+        if low.startswith("wbs"):
+            avail = row[avail_col] if avail_col < len(row) else None
+            tot = row[tot_col] if tot_col is not None and tot_col < len(row) else None
+            out.append({
+                "label": name.strip(),
+                "available": float(avail) if isinstance(avail, (int, float)) else None,
+                "total": float(tot) if isinstance(tot, (int, float)) else None,
+            })
+    return out

@@ -56,7 +56,7 @@ pm_app/export/
 1. **`package.json`** (root)
    ```json
    {
-     "version": "1.0.14"
+     "version": "1.0.15"
    }
    ```
 
@@ -64,13 +64,13 @@ pm_app/export/
    ```python
    app = FastAPI(
        title="PM Control Center API",
-       version="1.0.14",
+       version="1.0.15",
    )
    ```
 
 3. **`frontend/src/components/Layout.tsx`** (footer text)
    ```tsx
-   <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.14</div>
+   <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.15</div>
    ```
 
 ## Build Process
@@ -317,7 +317,7 @@ else:
     BASE_DIR = Path(__file__).parent
 
 # FastAPI app
-app = FastAPI(title="PM Control Center API", version="1.0.14")
+app = FastAPI(title="PM Control Center API", version="1.0.15")
 
 # SQLite database path (in-memory)
 # Data loaded from Excel on /api/settings/configure
@@ -458,6 +458,7 @@ electron-updater notifies users
 
 ## Version History
 
+- **v1.0.15** — Cost Space bookato (CloseWon + 3B), %Charg allocation, FY/Quarter filters, BD Tracking, CCI per contratto, surgical Excel write-back
 - **v1.0.14** — Sidebar collapse fix, Cost Balancer labels, PPT Opus 5
 - **v1.0.13** — Due Diligence apply template
 - **v1.0.12** — Real WBS values, PPT generation with python-pptx
@@ -470,6 +471,20 @@ electron-updater notifies users
 
 ---
 
-**Last updated:** 2026-08-31  
+**Last updated:** 2026-09-30  
 **Maintainer:** PM Control Center Team  
 **Repository:** https://github.com/DaveDev97/PmControlCenter
+
+## Excel Write-back
+
+Inline edits of **MMS Status** and **Stato ACN Tool** (Opportunities page) are
+written straight into the source workbook by `backend/app/services/xlsx_patch.py`:
+
+- only the XML of the edited cells is rewritten; every other ZIP part (pivots,
+  conditional formatting, calcChain…) is copied byte-for-byte — never save the
+  workbook with openpyxl, it drops parts it does not understand;
+- a timestamped backup is written to `_backup_pmcc/` next to the workbook
+  (last 30 kept) before every write;
+- the row is re-located by `Opp ID MMS` at write time; formula cells are refused;
+- `fullCalcOnLoad` is set so Excel recalculates dependent sheets on next open;
+- if the file is open/locked in Excel the API returns **423** and nothing changes.

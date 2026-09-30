@@ -106,6 +106,9 @@ class OpportunityUpdate(BaseModel):
 
 class OpportunityOut(ORMModel, OpportunityBase):
     id: int
+    total_invoiced: float = 0.0
+    total_to_invoice: float = 0.0
+    source_sheet: str | None = None  # set when the row lives in an Opp sheet (editable in Excel)
 
 
 # ---------- Role ----------
@@ -148,6 +151,7 @@ class ResourceUpdate(BaseModel):
 class ResourceOut(ORMModel, ResourceBase):
     id: int
     role_name: str | None = None
+    perc_charg: float | None = None  # %Charg from "Costi vs Forecast" (None = not set)
 
 
 # ---------- Allocation ----------
