@@ -58,6 +58,8 @@ async def get_cost_space_summary(month: date, session: AsyncSession) -> list[dic
         await session.scalars(select(Resource).where(Resource.status == "active"))
     ).all()
     hours = calculate_working_hours_per_month(month)
+    sheet = excel_monthly_costs() or {"people": {}}
+    key = month.strftime("%Y-%m")
     rows = []
     for res in resources:
         lc = res.loaded_cost_hourly if res.loaded_cost_hourly else res.daily_rate / 8.0
@@ -70,6 +72,7 @@ async def get_cost_space_summary(month: date, session: AsyncSession) -> list[dic
             "perc_charg": perc,
             "charged_hours": round(charged_hours, 1) if charged_hours is not None else None,
             "monthly_cost": round(charged_hours * lc, 2) if charged_hours is not None else None,
+            "sheet_cost": sheet["people"].get(res.name, {}).get(key),  # "costo €" of the month in Excel
             "status": allocation_status(perc),
         })
     priority = {"over": 0, "high": 1, "ok": 2, "nd": 3}
@@ -118,7 +121,9 @@ async def get_booked_cost_space(session: AsyncSession, fys: list[str] | None = N
         return d
 
     booked_rows.sort(key=lambda r: -r["revenues"])
+    costs = planned_costs(sorted(wanted) if wanted else None)
     return {
+        "planned_costs": costs,
         "ratio": round(ratio, 4),
         "cci_target": settings.cci_target_threshold,
         "fys": sorted(wanted) if wanted else None,
@@ -126,6 +131,142 @@ async def get_booked_cost_space(session: AsyncSession, fys: list[str] | None = N
         "by_fy": [with_space(by_fy[k]) for k in sorted(by_fy)],
         "booked": booked_rows,
         "excel_wbs": excel_wbs_cost_space(),
+    }
+
+
+_MONTHS_IT = {"gen": 1, "feb": 2, "mar": 3, "apr": 4, "mag": 5, "giu": 6, "lug": 7, "ago": 8,
+              "set": 9, "sett": 9, "ott": 10, "otto": 10, "nov": 11, "dic": 12}
+
+
+def _num(v) -> float | None:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def excel_monthly_costs() -> dict | None:
+    """Monthly costs of the ``Costi vs Forecast`` resource table.
+
+    Layout: a row of FY labels ("FY25", "FY26"...), a row of month names
+    ("sett", "otto", "nov"...) above each hours column, then the "Resource" header
+    row; each month is an (hours, "costo €") column pair. Rows run until
+    "SUM costi". People and other cost lines (subcontracts, "Unicredit",
+    "PMO Account"...) are split with :func:`classify_cost_row`; both are real
+    costs and together make up the sheet's "SUM costi".
+
+    Returns ``{"months": [...], "people": {name: {month: cost}},
+    "other": [{"name", "total", "months": {month: cost}}], "sum_costi": {month: cost}}``.
+    """
+    from app.services.excel_reader import classify_cost_row
+
+    path = current_workbook()
+    if path is None or not path.exists():
+        return None
+    try:
+        rows = find_sheet(sheet_values(path), lambda t: "costi vs forecast" in t)
+    except Exception:  # noqa: BLE001 - an unreadable file must not break the page
+        return None
+    if not rows:
+        return None
+    hdr = res_col = None
+    for ri, row in enumerate(rows):
+        if "Resource" in [v.strip() if isinstance(v, str) else v for v in row]:
+            hdr = ri
+            res_col = next(i for i, v in enumerate(row) if isinstance(v, str) and v.strip() == "Resource")
+            break
+    if hdr is None:
+        return None
+    labels = [(v.strip().lower() if isinstance(v, str) else "") for v in rows[hdr]]
+    lc_col = labels.index("lc") if "lc" in labels else None
+    charg_col = next((i for i, v in enumerate(labels) if v.startswith("%charg")), None)
+
+    # FY label row and month-name row sit above the header.
+    fy_cols: list[tuple[int, int]] = []
+    month_row = None
+    for row in rows[:hdr]:
+        for ci, v in enumerate(row):
+            if isinstance(v, str) and v.strip().upper().startswith("FY") and v.strip()[2:].isdigit():
+                fy_cols.append((ci, 2000 + int(v.strip()[2:])))
+        if sum(1 for v in row if isinstance(v, str) and v.strip().lower() in _MONTHS_IT) >= 6:
+            month_row = row
+    if month_row is None or not fy_cols:
+        return None
+    cost_cols: list[tuple[int, str]] = []
+    for ci, v in enumerate(month_row):
+        m = _MONTHS_IT.get(v.strip().lower()) if isinstance(v, str) else None
+        fy = next((y for c, y in reversed(fy_cols) if c <= ci), None)
+        if m is None or fy is None:
+            continue
+        year = fy - 1 if m >= 9 else fy
+        col = ci + 1 if ci + 1 < len(labels) and labels[ci + 1].startswith("costo") else ci
+        cost_cols.append((col, f"{year:04d}-{m:02d}"))
+
+    def monthly(row) -> dict[str, float]:
+        out = {}
+        for col, key in cost_cols:
+            v = _num(row[col]) if col < len(row) else None
+            if v:
+                out[key] = round(v, 2)
+        return out
+
+    people: dict[str, dict[str, float]] = {}
+    other: list[dict] = []
+    sum_costi: dict[str, float] = {}
+    for row in rows[hdr + 1:]:
+        name = row[res_col] if res_col < len(row) else None
+        if not isinstance(name, str) or not name.strip():
+            continue
+        name = name.strip()
+        if name.lower().startswith("sum costi"):
+            sum_costi = monthly(row)
+            break
+        lc = row[lc_col] if lc_col is not None and lc_col < len(row) else None
+        charg = row[charg_col] if charg_col is not None and charg_col < len(row) else None
+        kind = classify_cost_row(name, lc, charg)
+        if kind == "person":
+            people.setdefault(name, monthly(row))
+        elif kind == "cost":
+            months = monthly(row)
+            other.append({"name": name, "total": _num(lc) if _num(lc) is not None else round(sum(months.values()), 2),
+                          "months": months})
+    return {"months": [k for _, k in cost_cols], "people": people, "other": other, "sum_costi": sum_costi}
+
+
+def fy_of_month(month: str) -> str:
+    """'2026-09' -> 'FY27' (FY runs September-August)."""
+    y, m = int(month[:4]), int(month[5:7])
+    return f"FY{str(y + 1 if m >= 9 else y)[-2:]}"
+
+
+def planned_costs(fys: list[str] | None, today: date | None = None) -> dict | None:
+    """Costs planned in the selected FYs: people + other cost lines (= SUM costi)."""
+    data = excel_monthly_costs()
+    if data is None:
+        return None
+    wanted = {f.upper() for f in fys} if fys else None
+    now = (today or date.today()).strftime("%Y-%m")
+
+    def in_scope(m: str) -> bool:
+        return wanted is None or fy_of_month(m) in wanted
+
+    people_total = sum(v for months in data["people"].values() for m, v in months.items() if in_scope(m))
+    other_rows = []
+    for o in data["other"]:
+        by_fy: dict[str, float] = {}
+        for m, v in o["months"].items():
+            by_fy[fy_of_month(m)] = round(by_fy.get(fy_of_month(m), 0.0) + v, 2)
+        other_rows.append({
+            "name": o["name"],
+            "total": o["total"],
+            "by_fy": by_fy,
+            "in_scope": round(sum(v for m, v in o["months"].items() if in_scope(m)), 2),
+            "remaining": round(sum(v for m, v in o["months"].items() if m >= now), 2),
+        })
+    other_total = sum(o["in_scope"] for o in other_rows)
+    return {
+        "people": round(people_total, 2),
+        "other": round(other_total, 2),
+        "total": round(people_total + other_total, 2),
+        "sum_costi_sheet": round(sum(v for m, v in data["sum_costi"].items() if in_scope(m)), 2),
+        "other_rows": other_rows,
     }
 
 

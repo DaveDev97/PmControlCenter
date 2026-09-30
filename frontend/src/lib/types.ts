@@ -274,7 +274,16 @@ export interface CostSpaceBucket {
   delta_cost_space: number;
 }
 
+export interface PlannedCosts {
+  people: number;
+  other: number;
+  total: number;
+  sum_costi_sheet: number;
+  other_rows: { name: string; total: number | null; by_fy: Record<string, number>; in_scope: number; remaining: number }[];
+}
+
 export interface BookedCostSpace {
+  planned_costs: PlannedCosts | null;
   ratio: number;
   cci_target: number;
   fys: string[] | null;

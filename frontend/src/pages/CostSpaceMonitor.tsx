@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
-import type { BookedCostSpace } from "../lib/types";
+import type { BookedCostSpace, PlannedCosts } from "../lib/types";
 import { Card, Loading, ErrorBox, AllocationBadge } from "../components/ui";
-import { fmtEur, fmtPct } from "../lib/format";
+import { fmtEur, fmtMonth, fmtPct } from "../lib/format";
 
 interface AllocationRow {
   resource_id: number;
@@ -13,13 +13,20 @@ interface AllocationRow {
   perc_charg: number | null;
   charged_hours: number | null;
   monthly_cost: number | null;
+  sheet_cost: number | null;
   status: "ok" | "high" | "over" | "nd";
 }
 
 interface AllocationSummary {
   month: string;
   resources: AllocationRow[];
-  totals: { monthly_cost: number; avg_perc_charg: number | null; over: number; high: number; ok: number; nd: number };
+  other_costs: { name: string; cost: number }[];
+  totals: {
+    sheet_people_cost: number;
+    sheet_other_cost: number;
+    sheet_total_cost: number;
+    sheet_sum_costi: number | null;
+    monthly_cost: number; avg_perc_charg: number | null; over: number; high: number; ok: number; nd: number };
 }
 
 const ALL_FYS = ["FY25", "FY26", "FY27"];
@@ -33,6 +40,84 @@ function Kpi({ label, value, sub, tone = "text-slate-800 dark:text-slate-100" }:
       <div className={`mt-1 text-2xl font-bold ${tone}`}>{value}</div>
       {sub && <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">{sub}</div>}
     </Card>
+  );
+}
+
+/** Costs already planned in "Costi vs Forecast": people + other cost lines (= SUM costi). */
+function PlannedCostsBlock({ costs, fys, wbs }: {
+  costs: PlannedCosts; fys: string[]; wbs: BookedCostSpace["excel_wbs"];
+}) {
+  const gap = Math.abs(costs.total - costs.sum_costi_sheet);
+  const available = wbs.reduce((s, w) => s + (w.available ?? 0), 0);
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Kpi
+          label={`Costi previsti ${fys.join(" + ")}`}
+          value={fmtEur(costs.total)}
+          sub={`risorse ${fmtEur(costs.people)} + altri costi ${fmtEur(costs.other)}`}
+        />
+        <Kpi
+          label="Spazio costi disponibile (foglio)"
+          value={wbs.length ? fmtEur(available) : "-"}
+          sub={wbs.length ? `colonna Available delle righe ${wbs.map((w) => w.label).join(", ")}` : "righe WBS non trovate"}
+          tone={available < 0 ? "text-red-600" : "text-emerald-600"}
+        />
+        <Kpi
+          label="SUM costi nel foglio"
+          value={fmtEur(costs.sum_costi_sheet)}
+          sub={gap >= 1 ? `differenza ${fmtEur(gap)}: nel foglio alcune celle SUM sono valori fissi o non includono tutte le righe` : "coincide con risorse + altri costi"}
+        />
+      </div>
+      <Card title="Altri costi da sostenere (non risorse)" className="mb-4">
+        {costs.other_rows.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Nessuna riga di costo trovata.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400 dark:border-slate-700">
+                <th className="py-2">Voce</th>
+                <th className="text-right">Totale (colonna LC)</th>
+                {fys.map((fy) => (
+                  <th key={fy} className="text-right">{fy}</th>
+                ))}
+                <th className="text-right">Da sostenere da oggi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {costs.other_rows.map((o) => (
+                <tr key={o.name} className="border-b border-slate-50 dark:border-slate-800">
+                  <td className="py-2 font-medium text-slate-700 dark:text-slate-200">{o.name}</td>
+                  <td className="text-right">{o.total == null ? "-" : fmtEur(o.total)}</td>
+                  {fys.map((fy) => (
+                    <td key={fy} className="text-right text-slate-600 dark:text-slate-300">
+                      {o.by_fy[fy] ? fmtEur(o.by_fy[fy]) : "-"}
+                    </td>
+                  ))}
+                  <td className="text-right font-medium text-slate-700 dark:text-slate-200">
+                    {o.remaining ? fmtEur(o.remaining) : "-"}
+                  </td>
+                </tr>
+              ))}
+              <tr className="font-semibold text-slate-700 dark:text-slate-200">
+                <td className="py-2">Totale</td>
+                <td />
+                {fys.map((fy) => (
+                  <td key={fy} className="text-right">
+                    {fmtEur(costs.other_rows.reduce((s, o) => s + (o.by_fy[fy] || 0), 0))}
+                  </td>
+                ))}
+                <td className="text-right">{fmtEur(costs.other_rows.reduce((s, o) => s + o.remaining, 0))}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+        <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+          Subcontratti e costi non legati a una risorsa (es. Spazio costi Fusco, Unicredit, PMO Account), letti
+          mese per mese dalle colonne "costo €" del foglio Costi vs Forecast.
+        </p>
+      </Card>
+    </>
   );
 }
 
@@ -93,6 +178,8 @@ function BookedSection() {
               sub="pipeline − bookato"
             />
           </div>
+
+          {data.planned_costs && <PlannedCostsBlock costs={data.planned_costs} fys={fys} wbs={data.excel_wbs} />}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card title="Per FY">
@@ -208,7 +295,13 @@ function AllocationSection() {
              tone={data.totals.over ? "text-red-600" : "text-emerald-600"} />
         <Kpi label="Piene (81–100%)" value={String(data.totals.high)} />
         <Kpi label="%Charg media" value={data.totals.avg_perc_charg == null ? "-" : fmtPct(data.totals.avg_perc_charg)} />
-        <Kpi label="Costo mensile caricato" value={fmtEur(data.totals.monthly_cost)} sub="ore × %Charg × LC" />
+        <Kpi
+          label={`Costi del mese ${fmtMonth(data.month)}`}
+          value={fmtEur(data.totals.sheet_total_cost)}
+          sub={`risorse ${fmtEur(data.totals.sheet_people_cost)} + altri costi ${fmtEur(data.totals.sheet_other_cost)}${
+            data.totals.sheet_sum_costi != null ? ` · SUM costi foglio ${fmtEur(data.totals.sheet_sum_costi)}` : ""
+          }`}
+        />
       </div>
 
       {over.length > 0 && (
@@ -229,7 +322,8 @@ function AllocationSection() {
               <th>Allocazione</th>
               <th className="text-right">LC (€/h)</th>
               <th className="text-right">Ore caricate / mese</th>
-              <th className="text-right">Costo mensile</th>
+              <th className="text-right">Costo teorico (ore × %Charg × LC)</th>
+              <th className="text-right">Costo mese (foglio)</th>
             </tr>
           </thead>
           <tbody>
@@ -246,6 +340,17 @@ function AllocationSection() {
                 <td className="text-right text-slate-600 dark:text-slate-300">
                   {r.monthly_cost == null ? "-" : fmtEur(r.monthly_cost)}
                 </td>
+                <td className="text-right font-medium text-slate-700 dark:text-slate-200">
+                  {r.sheet_cost == null ? "-" : fmtEur(r.sheet_cost)}
+                </td>
+              </tr>
+            ))}
+            {data.other_costs.map((o) => (
+              <tr key={o.name} className="border-b border-slate-50 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
+                <td className="py-2 text-slate-600 dark:text-slate-300">{o.name}</td>
+                <td><span className="text-xs text-slate-400">altro costo</span></td>
+                <td /><td /><td />
+                <td className="text-right font-medium text-slate-700 dark:text-slate-200">{fmtEur(o.cost)}</td>
               </tr>
             ))}
           </tbody>

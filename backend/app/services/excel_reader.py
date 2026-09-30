@@ -91,6 +91,24 @@ def norm_opp_id(v) -> str | None:
     return s.lstrip("0") or s or None
 
 
+def classify_cost_row(name, lc, charg) -> str | None:
+    """Classify a row of the "Costi vs Forecast" resource table.
+
+    * ``"person"``: a resource with an hourly LC and a %Charg or a "name.surname" id;
+    * ``"cost"``: any other named line (subcontracts such as "Spazio costi Fusco",
+      "Unicredit", "PMO Account"...). Their LC column holds the total, not a rate;
+      they are real costs and count in the sheet's "SUM costi".
+    """
+    if not isinstance(name, str) or not name.strip():
+        return None
+    has_charg = isinstance(charg, (int, float)) and not _is_blank(charg)
+    is_rate = isinstance(lc, (int, float)) and 0 < lc < 1000
+    low = name.strip().lower()
+    if is_rate and (has_charg or "." in name) and not low.startswith(_NON_RESOURCE_PREFIXES):
+        return "person"
+    return "cost"
+
+
 def mms_to_stage(mms: str | None) -> str:
     """Map the raw MMS Status of the Opp sheets to the internal workflow stage."""
     m = (mms or "").strip().lower()
@@ -342,19 +360,17 @@ class ExcelDataLoader:
             low = name.lower()
             if low.startswith("sum costi"):
                 break  # end of the resource table; cost-space summary blocks follow
-            if low.startswith(_NON_RESOURCE_PREFIXES) or name in seen:
+            if name in seen:
                 continue
             raw_lc = row[lc_col] if lc_col is not None and lc_col < len(row) else None
             raw_charg = row[charg_col] if charg_col is not None and charg_col < len(row) else None
-            has_charg = isinstance(raw_charg, (int, float)) and not _is_blank(raw_charg)
-            # A person has an hourly LC plus a %Charg or a "name.surname" id; lines
-            # like "Unicredit 20342" or "PMO Account 10578" are cost buckets.
-            if not isinstance(raw_lc, (int, float)) or not 0 < raw_lc < 1000:
-                continue
-            if not has_charg and "." not in name:
+            # Cost lines ("Unicredit", "PMO Account"...) are not people: they are
+            # shown as "Altri costi" by services.cost_space.excel_monthly_costs.
+            if classify_cost_row(name, raw_lc, raw_charg) != "person":
                 continue
             seen.add(name)
             lc = float(raw_lc)
+            has_charg = isinstance(raw_charg, (int, float)) and not _is_blank(raw_charg)
             perc = float(raw_charg) if has_charg else None
             charg = perc if perc is not None else 0.80
             res = Resource(

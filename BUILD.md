@@ -458,7 +458,7 @@ electron-updater notifies users
 
 ## Version History
 
-- **v1.0.15** — Cost Space bookato (CloseWon + 3B), %Charg allocation, FY/Quarter filters, BD Tracking, CCI per contratto, surgical Excel write-back
+- **v1.0.15** — Cost Space bookato (CloseWon + 3B), altri costi non-risorsa, %Charg allocation, FY/Quarter filters, BD Tracking, CCI per contratto, surgical Excel write-back
 - **v1.0.14** — Sidebar collapse fix, Cost Balancer labels, PPT Opus 5
 - **v1.0.13** — Due Diligence apply template
 - **v1.0.12** — Real WBS values, PPT generation with python-pptx
