@@ -1,9 +1,11 @@
 """Write inline opportunity edits straight into the ``Opp. FYxx`` sheets.
 
-The row is located again at write time (by Opp ID MMS, falling back to the
-row recorded at load time when the project name still matches), so edits land
-on the right row even if the file changed since it was loaded. Only the input
-sheets are ever written; formula sheets recompute in Excel.
+The row is located by Opp ID MMS (falling back to the row recorded at load
+time when the project name still matches) in the in-memory workbook snapshot.
+Only if the file was changed by someone else since it was loaded is the sheet
+read again from disk, so edits always land on the right row. After writing,
+the snapshot is patched so the app's own write never triggers a reload.
+Only the input sheets are ever written; formula sheets recompute in Excel.
 """
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ from pathlib import Path
 import openpyxl
 
 from app.models import Opportunity
-from app.services import xlsx_patch
+from app.services import workbook_cache, xlsx_patch
 from app.services.excel_reader import norm_opp_id
 
 # Opportunity attribute -> column header in the Opp sheets (lower-case).
@@ -22,15 +24,22 @@ EDITABLE_COLUMNS = {
 }
 
 
-def _locate(path: Path, opp: Opportunity) -> tuple[int, dict[str, int], list]:
-    """Return (excel_row, {header: col_index0}, row_values) of ``opp`` in its sheet."""
+def _sheet_rows(path: Path, sheet: str) -> list[list]:
+    """Rows of ``sheet``: from RAM, or from disk if the file changed externally."""
+    cached = workbook_cache.cached_sheets().get(sheet)
+    if cached is not None and not workbook_cache.changed_on_disk():
+        return cached
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
-        if opp.source_sheet not in wb.sheetnames:
-            raise LookupError(f"Foglio '{opp.source_sheet}' non trovato: ricarica i dati")
-        rows = [list(r) for r in wb[opp.source_sheet].iter_rows(min_row=1, min_col=1, values_only=True)]
+        if sheet not in wb.sheetnames:
+            raise LookupError(f"Foglio '{sheet}' non trovato: ricarica i dati")
+        return [list(r) for r in wb[sheet].iter_rows(min_row=1, min_col=1, values_only=True)]
     finally:
         wb.close()
+
+
+def _locate(rows: list[list], opp: Opportunity) -> tuple[int, dict[str, int], list]:
+    """Return (excel_row, {header: col_index0}, row_values) of ``opp`` in ``rows``."""
     hdr = next((i for i, r in enumerate(rows[:5])
                 if any(isinstance(v, str) and v.strip() == "Contract" for v in r)), None)
     if hdr is None:
@@ -67,19 +76,29 @@ def _coerce(existing, value):
 def write_opportunity_fields(path: Path, opp: Opportunity, changes: dict) -> Path:
     """Write the editable ``changes`` of ``opp`` to Excel. Returns the backup path."""
     try:
-        row, cols, values = _locate(path, opp)
+        row, cols, values = _locate(_sheet_rows(path, opp.source_sheet), opp)
     except PermissionError as exc:
         raise xlsx_patch.WorkbookLockedError(
             "Il file Excel è aperto o bloccato: chiudilo in Excel e riprova."
         ) from exc
-    cells = {}
+    cells: dict[str, object] = {}
+    patch: dict[tuple[int, int], object] = {}
     for attr, value in changes.items():
         header = EDITABLE_COLUMNS.get(attr)
         if header is None or header not in cols:
             continue
         ci = cols[header]
         existing = values[ci] if ci < len(values) else None
-        cells[f"{xlsx_patch.col_letter(ci + 1)}{row}"] = _coerce(existing, value)
+        new = _coerce(existing, value)
+        cells[f"{xlsx_patch.col_letter(ci + 1)}{row}"] = new
+        patch[(row, ci + 1)] = new
     if not cells:
         raise LookupError("Nessuna colonna modificabile trovata nel foglio")
-    return xlsx_patch.set_cells(path, opp.source_sheet, cells)
+    external_change = workbook_cache.changed_on_disk()
+    backup = xlsx_patch.set_cells(path, opp.source_sheet, cells)
+    if not external_change:
+        # Our own write: patch RAM and record the new file signature (no reload).
+        workbook_cache.apply_own_write(opp.source_sheet, patch)
+    # Otherwise leave the old signature: the watcher reloads the whole file,
+    # picking up both the external change and this edit.
+    return backup

@@ -16,7 +16,7 @@ import re
 from datetime import date, datetime
 
 from app.core.config import settings
-from app.services.workbook_cache import current_workbook, find_sheet, sheet_values
+from app.services.workbook_cache import cached_sheets, find_sheet
 
 _CONTRACT_HEADER_RE = re.compile(r"^\s*(\d{6,})\s*-\s*(.+?)\s*$")
 _METRICS = {
@@ -213,10 +213,9 @@ def _match_client(name: str, candidates: list[str]) -> str | None:
 
 def cci_overview(client_by_contract: dict[str, str], today: date | None = None) -> dict:
     """Full CCI payload. ``client_by_contract`` maps contract id -> client name."""
-    path = current_workbook()
-    if path is None or not path.exists():
+    sheets = cached_sheets()
+    if not sheets:
         return {"available": False, "target": settings.cci_target_threshold, "contracts": [], "snapshot": None}
-    sheets = sheet_values(path)
     target = settings.cci_target_threshold
     today = today or date.today()
     contracts_rows = find_sheet(sheets, lambda t: t == "contracts") or []

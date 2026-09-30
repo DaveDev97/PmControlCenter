@@ -56,7 +56,7 @@ pm_app/export/
 1. **`package.json`** (root)
    ```json
    {
-     "version": "1.0.15"
+     "version": "1.0.16"
    }
    ```
 
@@ -64,13 +64,13 @@ pm_app/export/
    ```python
    app = FastAPI(
        title="PM Control Center API",
-       version="1.0.15",
+       version="1.0.16",
    )
    ```
 
 3. **`frontend/src/components/Layout.tsx`** (footer text)
    ```tsx
-   <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.15</div>
+   <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.16</div>
    ```
 
 ## Build Process
@@ -317,7 +317,7 @@ else:
     BASE_DIR = Path(__file__).parent
 
 # FastAPI app
-app = FastAPI(title="PM Control Center API", version="1.0.15")
+app = FastAPI(title="PM Control Center API", version="1.0.16")
 
 # SQLite database path (in-memory)
 # Data loaded from Excel on /api/settings/configure
@@ -458,6 +458,7 @@ electron-updater notifies users
 
 ## Version History
 
+- **v1.0.16** — Fix backend crash at startup (greenlet missing with SQLAlchemy 2.1); workbook read once into RAM, background watcher reloads only on external changes
 - **v1.0.15** — Cost Space bookato (CloseWon + 3B), altri costi non-risorsa, %Charg allocation, FY/Quarter filters, BD Tracking, CCI per contratto, surgical Excel write-back
 - **v1.0.14** — Sidebar collapse fix, Cost Balancer labels, PPT Opus 5
 - **v1.0.13** — Due Diligence apply template

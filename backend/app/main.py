@@ -5,6 +5,7 @@ already been configured, loads the Excel workbooks. When no folder is
 configured yet the API still starts (returning empty datasets / a "not
 configured" status) so the frontend can present the Setup Wizard.
 """
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,7 +32,7 @@ from app.api import (
 )
 from app.core.config import settings
 from app.core.database import init_db
-from app.services.data_sync import reload_data
+from app.services.data_sync import reload_data, watch_workbook
 
 
 @asynccontextmanager
@@ -44,10 +45,13 @@ async def lifespan(app: FastAPI):
         except (FileNotFoundError, ValueError) as exc:
             # Folder moved/unavailable: start unconfigured so the wizard can run.
             print(f"[startup] Could not load data folder: {exc}")
+    # Everything is now in RAM; only re-read the file if someone else changes it.
+    watcher = asyncio.create_task(watch_workbook())
     yield
+    watcher.cancel()
 
 
-app = FastAPI(title=settings.app_name, version="1.0.15", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.16", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

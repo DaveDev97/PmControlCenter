@@ -1,6 +1,8 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
-sqlalchemy>=2.0
+# [asyncio] pulls greenlet: SQLAlchemy 2.1 no longer installs it by default and
+# the bundled backend crashes at import without it.
+sqlalchemy[asyncio]>=2.0
 aiosqlite>=0.19
 pydantic>=2.6
 pydantic-settings>=2.1

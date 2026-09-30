@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
@@ -22,7 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { setLanguage, type Language } from "../lib/i18n";
-import { updates } from "../lib/settings";
+import { settingsApi, updates } from "../lib/settings";
 
 const nav = [
   { to: "/", labelKey: "nav.account", icon: LayoutDashboard, end: true },
@@ -83,6 +84,24 @@ export default function Layout() {
   const { t, i18n } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const queryClient = useQueryClient();
+
+  // The backend reloads the Excel file when someone else changes it; when the
+  // data timestamp moves, refresh every page. Cheap: no disk access server-side.
+  useEffect(() => {
+    let last: string | null | undefined;
+    const check = () =>
+      settingsApi
+        .status()
+        .then((s) => {
+          if (last !== undefined && s.last_sync !== last) queryClient.invalidateQueries();
+          last = s.last_sync;
+        })
+        .catch(() => {});
+    check();
+    const id = setInterval(check, 15000);
+    return () => clearInterval(id);
+  }, [queryClient]);
 
   // Show a notification dot on Settings when an update is available/downloaded.
   useEffect(() => {
@@ -195,7 +214,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className={`flex ${collapsed ? "flex-col items-center gap-2" : "items-center justify-between"}`}>
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.15</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.16</div>
             )}
 
             <div className={`flex gap-2 ${collapsed ? "flex-col" : ""}`}>

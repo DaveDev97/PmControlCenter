@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models import Opportunity, Resource
 from app.services.excel_reader import fy_label
-from app.services.workbook_cache import current_workbook, find_sheet, sheet_values
+from app.services.workbook_cache import cached_sheets, find_sheet
 
 BOOKED_MMS = {"closewon", "3b"}
 ALLOC_HIGH = 0.80  # > 80% -> yellow
@@ -157,13 +157,7 @@ def excel_monthly_costs() -> dict | None:
     """
     from app.services.excel_reader import classify_cost_row
 
-    path = current_workbook()
-    if path is None or not path.exists():
-        return None
-    try:
-        rows = find_sheet(sheet_values(path), lambda t: "costi vs forecast" in t)
-    except Exception:  # noqa: BLE001 - an unreadable file must not break the page
-        return None
+    rows = find_sheet(cached_sheets(), lambda t: "costi vs forecast" in t)
     if not rows:
         return None
     hdr = res_col = None
@@ -277,13 +271,7 @@ def excel_wbs_cost_space() -> list[dict]:
     labelled "Available" and "SpazioCosti Tot". Returned for cross-checking the
     opportunity-based figure; empty if the block is not found.
     """
-    path = current_workbook()
-    if path is None or not path.exists():
-        return []
-    try:
-        rows = find_sheet(sheet_values(path), lambda t: "costi vs forecast" in t)
-    except Exception:  # noqa: BLE001 - an unreadable file must not break the page
-        return []
+    rows = find_sheet(cached_sheets(), lambda t: "costi vs forecast" in t)
     if not rows:
         return []
     out: list[dict] = []

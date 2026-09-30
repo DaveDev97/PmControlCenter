@@ -33,7 +33,7 @@ from app.schemas import (
 )
 from app.services.excel_reader import mms_to_stage
 from app.services.opp_writeback import EDITABLE_COLUMNS, write_opportunity_fields
-from app.services.workbook_cache import current_workbook
+from app.services.workbook_cache import current_workbook, data_lock
 from app.services.xlsx_patch import WorkbookLockedError
 
 router = APIRouter(prefix="/api", tags=["crud"])
@@ -155,6 +155,13 @@ async def create_opportunity(
 async def update_opportunity(
     opp_id: int, payload: OpportunityUpdate, session: AsyncSession = Depends(get_session)
 ):
+    # Excel write + DB update run under the data lock so a background reload
+    # can never interleave with them.
+    async with data_lock:
+        return await _update_opportunity(opp_id, payload, session)
+
+
+async def _update_opportunity(opp_id: int, payload: OpportunityUpdate, session: AsyncSession):
     o = await session.get(Opportunity, opp_id)
     if o is None:
         raise HTTPException(404, "Opportunity not found")

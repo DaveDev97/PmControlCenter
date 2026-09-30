@@ -181,31 +181,36 @@ class ExcelDataLoader:
         except Exception as exc:  # noqa: BLE001 - report any open error to the user
             return {"valid": False, "found": [wb_path.name], "missing": [], "optional": [],
                     "error": f"Impossibile aprire il file: {exc}"}
-        looks_valid = ("contracts" in titles or any(t.startswith("opp.") for t in titles)
-                       or any("forecast" in t for t in titles))
-        if not looks_valid:
+        if not self.looks_like_workbook(titles):
             return {"valid": False, "found": [wb_path.name], "missing": [], "optional": [],
                     "error": "Il file non sembra un workbook PM Control Center "
                              "(mancano i fogli Contracts / Opp. / Forecast)."}
         return {"valid": True, "found": [wb_path.name], "missing": [], "optional": [], "path": str(wb_path)}
 
-    async def load_all(self, data_folder: Path, session: AsyncSession) -> dict:
-        wb_path = self.resolve_workbook(data_folder)
-        if wb_path is None:
-            raise FileNotFoundError(f"No Excel file at {data_folder}")
-        wb = openpyxl.load_workbook(wb_path, data_only=True, read_only=True)
+    @staticmethod
+    def looks_like_workbook(titles) -> bool:
+        """Content check on sheet titles: Contracts / Opp. / Forecast sheets."""
+        low = {t.lower() for t in titles}
+        return ("contracts" in low or any(t.startswith("opp.") for t in low)
+                or any("forecast" in t for t in low))
+
+    async def load_all(self, data_folder: Path, session: AsyncSession, snap=None) -> dict:
+        """Populate the DB from ``snap`` (a workbook_cache snapshot); reads the file if None."""
+        if snap is None:
+            from app.services.workbook_cache import read_workbook
+
+            wb_path = self.resolve_workbook(data_folder)
+            if wb_path is None:
+                raise FileNotFoundError(f"No Excel file at {data_folder}")
+            snap = read_workbook(wb_path)
+        wb = snap  # openpyxl-like interface over the in-memory sheets
         counts = {k: 0 for k in
                   ("clients", "contracts", "financials", "resources", "allocations",
                    "opportunities", "bd_items")}
-        try:
-            contract_ids = await self._load_contracts(wb, session, counts)
-            await self._load_resources_and_allocations(wb, session, counts, contract_ids)
-            opps = await self._load_opportunities(wb, session, counts, contract_ids)
-            bd_rows = await self._load_bd(wb, session, counts)
-        finally:
-            # read_only keeps the file handle open until closed: without this the
-            # workbook stays locked (Excel cannot save it, write-back cannot replace it).
-            wb.close()
+        contract_ids = await self._load_contracts(wb, session, counts)
+        await self._load_resources_and_allocations(wb, session, counts, contract_ids)
+        opps = await self._load_opportunities(wb, session, counts, contract_ids)
+        bd_rows = await self._load_bd(wb, session, counts)
         await self._refine_client_names(session, opps, bd_rows)
 
         await session.commit()
