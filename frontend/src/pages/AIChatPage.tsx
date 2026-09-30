@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, RotateCcw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Send, Loader2, RotateCcw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { chatApi } from "../lib/settings";
 
 interface Message {
@@ -27,6 +28,7 @@ export default function AIChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { data: status } = useQuery({ queryKey: ["chat-status"], queryFn: chatApi.status, staleTime: 60_000 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -48,12 +50,16 @@ export default function AIChatPage() {
     };
 
     const question = input;
+    // Previous real turns (not the welcome text) so follow-up questions have context.
+    const history = messages
+      .filter((m) => m.id !== "welcome")
+      .map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const { reply } = await chatApi.send(question);
+      const { reply } = await chatApi.send(question, history);
       setMessages((prev) => [
         ...prev,
         { id: (Date.now() + 1).toString(), role: "assistant", content: reply, timestamp: new Date() },
@@ -104,6 +110,15 @@ export default function AIChatPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Assistente intelligente per il Control Center
             </p>
+            {status && (
+              <p className={`mt-1 flex items-center gap-1 text-xs ${status.available ? "text-emerald-600" : "text-red-600"}`}
+                 title={status.path || undefined}>
+                {status.available ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                {status.available
+                  ? `Claude Code collegato · modello ${status.model}`
+                  : "Claude Code non trovato: installalo o indica il percorso di claude.exe nelle Impostazioni"}
+              </p>
+            )}
           </div>
           <button
             onClick={handleReset}

@@ -18,7 +18,6 @@ PM Control Center è un'applicazione desktop Windows per la gestione di progetti
 - 🎨 **Dark/Light mode** - Tema personalizzabile
 - 📝 **Due Diligence tracking** - Workflow sequenziale 22 step
 - 💰 **Fatturazione** - Tracking invoice per opportunità
-- ⏱️ **Time Reports** - Gestione ore dichiarate (quindicine)
 - 🔐 **Dati anonimizzati** - Excel demo inclusi per test
 
 ## 🚀 Quick Start

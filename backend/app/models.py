@@ -223,9 +223,6 @@ class Project(Base):
     allocations: Mapped[list[Allocation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-    time_entries: Mapped[list["TimeEntry"]] = relationship(
-        back_populates="project", cascade="all, delete-orphan"
-    )
 
 
 class DueDiligence(Base):
@@ -251,27 +248,6 @@ class DueDiligence(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="due_diligences")
-
-
-class TimeEntry(Base):
-    """Time tracking for resources on projects"""
-
-    __tablename__ = "time_entries"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id"), index=True)
-    project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("projects.id"), nullable=True, index=True
-    )
-    period: Mapped[str] = mapped_column(String, index=True)  # "2Q", "1Q", etc.
-    hours: Mapped[float] = mapped_column(Float, default=0.0)
-    wbs: Mapped[str] = mapped_column(String)  # "B7PMH001", "Meeting Time", "Permesso", etc.
-    type: Mapped[str] = mapped_column(String)  # "Chargeable", "Not Chargeable"
-    week_ending: Mapped[date | None] = mapped_column(Date, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-    resource: Mapped[Resource] = relationship()
-    project: Mapped[Project | None] = relationship(back_populates="time_entries")
 
 
 class Invoice(Base):

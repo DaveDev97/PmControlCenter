@@ -8,9 +8,7 @@ import {
   FileText,
   Users,
   Target,
-  UserCircle,
   TrendingUp,
-  Clock,
   MessageSquare,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +17,7 @@ import {
   Settings as SettingsIcon,
   Languages,
   Briefcase,
+  ClipboardCheck,
   Gauge,
   type LucideIcon,
 } from "lucide-react";
@@ -30,12 +29,11 @@ const nav = [
   { to: "/contracts", labelKey: "nav.contracts", icon: FileText },
   { to: "/opportunities", labelKey: "nav.opportunities", icon: Target },
   { to: "/team", labelKey: "nav.team", icon: Users },
-  { to: "/resources", labelKey: "nav.resources", icon: UserCircle },
   { to: "/cost-balancer", labelKey: "nav.costBalancer", icon: TrendingUp },
   { to: "/cost-space", labelKey: "nav.costSpace", icon: BarChart3 },
   { to: "/cci", labelKey: "nav.cci", icon: Gauge },
   { to: "/bd", labelKey: "nav.bd", icon: Briefcase },
-  { to: "/time-reports", labelKey: "nav.timeReports", icon: Clock },
+  { to: "/due-diligence", labelKey: "nav.dueDiligence", icon: ClipboardCheck },
 ];
 
 function NavItem({
@@ -214,7 +212,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className={`flex ${collapsed ? "flex-col items-center gap-2" : "items-center justify-between"}`}>
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.16</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.17</div>
             )}
 
             <div className={`flex gap-2 ${collapsed ? "flex-col" : ""}`}>

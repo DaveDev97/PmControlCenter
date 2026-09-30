@@ -100,8 +100,12 @@ def _cell_xml(ref: str, style: str | None, value) -> str:
     return f'<c r="{ref}"{s} t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
 
 
-def _patch_row(row_body: str, row_num: int, col: str, value) -> str:
-    """Return ``row_body`` with cell ``col{row_num}`` replaced or inserted."""
+def _patch_row(row_body: str, row_num: int, col: str, value, restyle=None) -> str:
+    """Return ``row_body`` with cell ``col{row_num}`` replaced or inserted.
+
+    ``restyle(old_style_index or None) -> new style index`` optionally changes the
+    cell's style (used to highlight proposed answers).
+    """
     ref = f"{col}{row_num}"
     target = col_index(col)
     insert_at = len(row_body)
@@ -114,15 +118,18 @@ def _patch_row(row_body: str, row_num: int, col: str, value) -> str:
             if m.group(2) and "<f" in m.group(2):
                 raise ValueError(f"La cella {ref} contiene una formula: non la sovrascrivo")
             sm = _ATTR_S_RE.search(m.group(1))
-            new = _cell_xml(ref, sm.group(1) if sm else None, value)
+            style = sm.group(1) if sm else None
+            new = _cell_xml(ref, restyle(style) if restyle else style, value)
             return row_body[: m.start()] + new + row_body[m.end():]
         if idx > target:
             insert_at = m.start()
             break
-    return row_body[:insert_at] + _cell_xml(ref, None, value) + row_body[insert_at:]
+    style = restyle(None) if restyle else None
+    return row_body[:insert_at] + _cell_xml(ref, style, value) + row_body[insert_at:]
 
 
-def _patch_sheet(xml: str, cells: dict[str, object]) -> str:
+def _patch_sheet(xml: str, cells: dict[str, object], restyle_refs: set[str] | None = None,
+                 restyle=None) -> str:
     for ref, value in cells.items():
         m = re.fullmatch(r"([A-Z]+)(\d+)", ref)
         if not m:
@@ -132,7 +139,8 @@ def _patch_sheet(xml: str, cells: dict[str, object]) -> str:
         rm = row_re.search(xml)
         if rm is None:
             raise ValueError(f"Riga {row_num} non trovata nel foglio")
-        body = _patch_row(rm.group(2) or "", row_num, col, value)
+        use_restyle = restyle if restyle_refs and ref in restyle_refs else None
+        body = _patch_row(rm.group(2) or "", row_num, col, value, use_restyle)
         attrs = rm.group(1).rstrip("/").rstrip()
         xml = xml[: rm.start()] + f"<row{attrs}>{body}</row>" + xml[rm.end():]
     return xml
@@ -189,3 +197,83 @@ def _set_cells(path: Path, sheet_title: str, cells: dict[str, object]) -> Path:
             "Il file Excel è aperto o bloccato: chiudilo in Excel e riprova."
         ) from exc
     return bak
+
+
+# --------------------------------------------------------------------------- #
+# copies with highlighted cells (used to deliver a filled-in document)
+# --------------------------------------------------------------------------- #
+_XF_RE = re.compile(r"<xf\b[^>]*?(?:/>|(?<!/)>.*?</xf>)", re.DOTALL)
+
+
+class _Highlighter:
+    """Adds a solid fill to styles.xml and clones cell styles to use it."""
+
+    def __init__(self, styles_xml: str, argb: str):
+        self.xml = styles_xml
+        self.cache: dict[str, str] = {}
+        fills = re.search(r"<fills\b[^>]*>(.*?)</fills>", self.xml, re.DOTALL)
+        xfs = re.search(r"<cellXfs\b[^>]*>(.*?)</cellXfs>", self.xml, re.DOTALL)
+        self.ok = bool(fills and xfs)
+        if not self.ok:
+            return
+        self.fill_id = len(re.findall(r"<fill\b", fills.group(1)))
+        new_fill = (f'<fill><patternFill patternType="solid"><fgColor rgb="{argb}"/>'
+                    '<bgColor indexed="64"/></patternFill></fill>')
+        self.xml = self.xml.replace("</fills>", new_fill + "</fills>", 1)
+        self.xml = re.sub(r'(<fills\b[^>]*?count=")\d+(")', rf"\g<1>{self.fill_id + 1}\g<2>", self.xml, count=1)
+
+    def _xfs(self) -> tuple[re.Match, list[str]]:
+        block = re.search(r"<cellXfs\b[^>]*>(.*?)</cellXfs>", self.xml, re.DOTALL)
+        return block, _XF_RE.findall(block.group(1))
+
+    def restyle(self, style: str | None) -> str | None:
+        if not self.ok:
+            return style
+        base = style or "0"
+        if base in self.cache:
+            return self.cache[base]
+        block, xfs = self._xfs()
+        src = xfs[int(base)] if int(base) < len(xfs) else xfs[0]
+        m = re.match(r"<xf\b([^>]*?)(/?)>", src)
+        attrs = re.sub(r'\s(fillId|applyFill)="[^"]*"', "", m.group(1))
+        clone = f'<xf{attrs} fillId="{self.fill_id}" applyFill="1"{m.group(2)}>' + src[m.end():]
+        new_index = str(len(xfs))
+        open_tag = re.match(r"<cellXfs\b[^>]*>", block.group(0)).group(0)
+        open_tag = re.sub(r'count="\d+"', f'count="{len(xfs) + 1}"', open_tag)
+        new_block = open_tag + block.group(1) + clone + "</cellXfs>"
+        self.xml = self.xml[: block.start()] + new_block + self.xml[block.end():]
+        self.cache[base] = new_index
+        return new_index
+
+
+def write_copy(src: Path, dst: Path, sheets: dict[str, dict[str, object]],
+               highlight: dict[str, set[str]] | None = None, argb: str = "FFFFF2CC") -> Path:
+    """Write ``sheets`` ({title: {"E12": value}}) into a copy of ``src`` saved as ``dst``.
+
+    Cells listed in ``highlight`` ({title: {"E12", ...}}) get a solid fill (light
+    yellow by default). ``src`` is never modified; every other part is copied as is.
+    """
+    src, dst = Path(src), Path(dst)
+    with zipfile.ZipFile(src, "r") as zin:
+        names = set(zin.namelist())
+        hl = None
+        if highlight and "xl/styles.xml" in names:
+            hl = _Highlighter(zin.read("xl/styles.xml").decode("utf-8"), argb)
+        replaced: dict[str, bytes] = {}
+        for title, cells in sheets.items():
+            if not cells:
+                continue
+            part = _sheet_part(zin, title)
+            xml = zin.read(part).decode("utf-8")
+            refs = (highlight or {}).get(title)
+            replaced[part] = _patch_sheet(xml, cells, refs, hl.restyle if hl else None).encode("utf-8")
+        if hl is not None and hl.ok:
+            replaced["xl/styles.xml"] = hl.xml.encode("utf-8")
+        replaced["xl/workbook.xml"] = _force_recalc(zin.read("xl/workbook.xml").decode("utf-8")).encode("utf-8")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(dst, "w") as zout:
+            for info in zin.infolist():
+                data = replaced.get(info.filename)
+                zout.writestr(info, data if data is not None else zin.read(info.filename),
+                              compress_type=info.compress_type)
+    return dst

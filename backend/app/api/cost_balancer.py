@@ -1,15 +1,19 @@
-"""Cost balancing API."""
+"""Cost Balancer API: usable cost space per contract at the CCI target."""
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app import schemas
 from app.core.database import get_session
-from app.services.cost_balancer import propose_cost_rebalancing
+from app.models import Contract
+from app.services.cost_balancer import balance_overview
 
 router = APIRouter(prefix="/api/cost-balance", tags=["cost-balance"])
 
 
-@router.get("/proposal/{contract_id}", response_model=schemas.CostBalanceProposal)
-async def get_proposal(contract_id: str, session: AsyncSession = Depends(get_session)):
-    """Get cost rebalancing proposal for a contract."""
-    return await propose_cost_rebalancing(contract_id, session)
+@router.get("")
+async def cost_balance(fy: str | None = None, session: AsyncSession = Depends(get_session)):
+    """Costs/revenue allocated, CCI vs target and residual usable cost space (``fy`` e.g. "FY27")."""
+    contracts = (await session.scalars(select(Contract).options(selectinload(Contract.client)))).all()
+    clients = {c.id: c.client.name for c in contracts if c.client}
+    return balance_overview(clients, fy)

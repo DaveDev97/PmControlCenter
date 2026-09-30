@@ -14,7 +14,8 @@ function heatColor(u: number): string {
   return "bg-brand-400 text-white"; // overload
 }
 
-export default function TeamDashboard() {
+/** Costs & margins of the team. ``embedded`` = shown inside the Team & Risorse page. */
+export default function TeamDashboard({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const { data, isLoading, error } = useQuery({
     queryKey: ["team"],
@@ -45,11 +46,13 @@ export default function TeamDashboard() {
   }
 
   return (
-    <div className="p-6">
-      <header className="mb-5">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Team Management</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{data.roster.length} persone attive</p>
-      </header>
+    <div className={embedded ? "" : "p-6"}>
+      {!embedded && (
+        <header className="mb-5">
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Team Management</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{data.roster.length} persone attive</p>
+        </header>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {data.kpis.map((k) => (
@@ -98,7 +101,7 @@ export default function TeamDashboard() {
         </table>
       </Card>
 
-      <Card title="Heatmap utilizzo (per mese)">
+      {!embedded && <Card title="Heatmap utilizzo (per mese)">
         <div className="overflow-x-auto">
           <table className="text-xs">
             <thead>
@@ -144,7 +147,7 @@ export default function TeamDashboard() {
           <span>🟩 80-100% pieno</span>
           <span className="text-brand-500">🟪 &gt;100% overload</span>
         </div>
-      </Card>
+      </Card>}
     </div>
   );
 }

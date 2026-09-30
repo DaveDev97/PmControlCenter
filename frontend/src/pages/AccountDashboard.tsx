@@ -9,6 +9,7 @@ import type { AccountDashboard as AccountData } from "../lib/types";
 import { Card, KpiCard, StatusBadge, Loading, ErrorBox } from "../components/ui";
 import { RevCostChart, PipelineBars } from "../components/charts";
 import { fmtEur, fmtPct } from "../lib/format";
+import PptTemplatePicker from "../components/PptTemplatePicker";
 
 export default function AccountDashboard() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function AccountDashboard() {
   const [pptPlan, setPptPlan] = useState<string>("");
   const [pptInstructions, setPptInstructions] = useState<string>("");
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [templateId, setTemplateId] = useState<string>("builtin:accenture");
 
   async function requestPptPreview() {
     setLoadingPlan(true);
@@ -31,7 +33,7 @@ export default function AccountDashboard() {
       const res = await fetch(`${base}/api/reports/account-ppt/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instructions: pptInstructions }),
+        body: JSON.stringify({ instructions: pptInstructions, template_id: templateId }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
@@ -50,7 +52,7 @@ export default function AccountDashboard() {
       const res = await fetch(`${base}/api/reports/account-ppt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instructions: pptInstructions }),
+        body: JSON.stringify({ instructions: pptInstructions, template_id: templateId }),
       });
       if (!res.ok) throw new Error(await res.text());
       const blob = await res.blob();
@@ -199,6 +201,17 @@ export default function AccountDashboard() {
             </h2>
 
             <div className="mb-4">
+              <PptTemplatePicker value={templateId} onChange={setTemplateId} />
+              <button
+                onClick={requestPptPreview}
+                disabled={loadingPlan}
+                className="mt-2 text-xs font-medium text-brand-700 hover:underline disabled:opacity-50 dark:text-brand-400"
+              >
+                Aggiorna la struttura proposta con questo stile
+              </button>
+            </div>
+
+            <div className="mb-4">
               <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
                 Istruzioni personalizzate (opzionale):
               </label>
@@ -218,7 +231,7 @@ export default function AccountDashboard() {
               {loadingPlan ? (
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Loader2 size={14} className="animate-spin" />
-                  Generazione piano in corso con Claude Opus 5...
+                  Generazione piano in corso con Claude Opus...
                 </div>
               ) : (
                 <pre className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">

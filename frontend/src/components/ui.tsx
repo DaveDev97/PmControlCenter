@@ -51,6 +51,8 @@ const KPI_TOOLTIPS: Record<string, string> = {
   "Team Size": "Numero totale di risorse nel team.",
   "Total Cost": "Costo totale mensile del team.",
   "Bench Count": "Numero di risorse non allocate (in panchina).",
+  "Allocate correttamente": "Quota di risorse con ore nel mese rispetto alla propria %Charg (foglio Costi vs Forecast). Il tempo su altri progetti (Other) non è considerato un'anomalia.",
+  "Bench": "Quota di risorse con una %Charg ma nessuna ora pianificata nel mese.",
 
   // Person Dashboard KPIs
   "Utilization %": "Percentuale di utilizzo della risorsa sui contratti.",

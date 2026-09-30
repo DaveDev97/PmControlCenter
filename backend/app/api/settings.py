@@ -39,6 +39,7 @@ class SettingsUpdate(BaseModel):
     theme: str | None = None
     auto_refresh_minutes: int | None = None
     chat_model: str | None = None
+    claude_path: str | None = None
 
 
 class SettingsOut(BaseModel):
@@ -49,6 +50,7 @@ class SettingsOut(BaseModel):
     theme: str
     auto_refresh_minutes: int
     chat_model: str
+    claude_path: str
     configured: bool
 
 
@@ -61,6 +63,7 @@ def _settings_out() -> SettingsOut:
         theme=settings.theme,
         auto_refresh_minutes=settings.auto_refresh_minutes,
         chat_model=settings.chat_model,
+        claude_path=settings.claude_path,
         configured=settings.data_folder is not None,
     )
 

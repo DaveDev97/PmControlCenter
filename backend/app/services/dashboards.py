@@ -365,6 +365,9 @@ async def build_team(session: AsyncSession) -> TeamDashboard:
     def month_date(m: str) -> date:
         return date(int(m[:4]), int(m[5:7]), 1)
 
+    from app.services.team_allocation import status_by_name
+
+    alloc_status = status_by_name()
     roster: list[TeamRosterRow] = []
     total_cost = 0.0
     total_rev = 0.0
@@ -389,7 +392,15 @@ async def build_team(session: AsyncSession) -> TeamDashboard:
                     if denom:
                         share = a_cost / denom
                         rev += month_rev.get((a.contract_id, latest_month), 0.0) * share
-        status = calc.util_status(util)
+        # Status and utilization come from the person's own %Charg and the hours
+        # booked in "Costi vs Forecast" this month (see team_allocation), not from
+        # the synthetic allocations, which produced false "bench" results.
+        alloc = alloc_status.get(r.name)
+        if alloc is not None:
+            util = (alloc["hours"] or 0) / alloc["month_hours"] if alloc.get("month_hours") else 0.0
+            status = {"ok": "full", "bench": "bench", "over": "bad"}.get(alloc["status"], "partial")
+        else:
+            status = calc.util_status(util)
         if status == "bench":
             bench_count += 1
         util_values.append(util)
@@ -415,12 +426,16 @@ async def build_team(session: AsyncSession) -> TeamDashboard:
     avg_util = round(sum(util_values) / len(util_values), 4) if util_values else 0.0
     headcount = len(resources)
     bench_pct = round(bench_count / headcount, 4) if headcount else 0.0
+    known = [s for s in alloc_status.values() if s["status"] != "nd"]
+    ok_pct = round(sum(1 for s in known if s["status"] == "ok") / len(known), 4) if known else 0.0
     rev_per_person = round(total_rev / headcount, 2) if headcount else 0.0
 
     kpis = [
         KpiValue(label="Total Team Cost", value=round(total_cost, 2), unit="EUR"),
-        KpiValue(label="Avg Utilization", value=avg_util, unit="PCT",
-                 status="good" if avg_util >= settings.util_full_threshold else "warning"),
+        # Share of people allocated as planned by their own %Charg (see team_allocation);
+        # an average utilization would flag people who are partly on "Other" projects.
+        KpiValue(label="Allocate correttamente", value=ok_pct, unit="PCT",
+                 status="good" if ok_pct >= 0.9 else "warning"),
         KpiValue(label="Revenue / Person", value=rev_per_person, unit="EUR"),
         KpiValue(label="Bench", value=bench_pct, unit="PCT",
                  status="good" if bench_pct < 0.2 else "warning"),

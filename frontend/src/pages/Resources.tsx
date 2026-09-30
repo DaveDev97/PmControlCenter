@@ -6,7 +6,8 @@ import type { Resource, Role } from "../lib/types";
 import { Card, Loading, ErrorBox, AllocationBadge } from "../components/ui";
 import { fmtEur } from "../lib/format";
 
-export default function Resources() {
+/** Resource registry. ``embedded`` = shown inside the Team & Risorse page. */
+export default function Resources({ embedded = false }: { embedded?: boolean }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
@@ -40,10 +41,10 @@ export default function Resources() {
   if (error) return <ErrorBox error={error} />;
 
   return (
-    <div className="p-6">
+    <div className={embedded ? "" : "p-6"}>
       <header className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Risorse</h1>
+          {!embedded && <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Risorse</h1>}
           <p className="text-sm text-slate-500 dark:text-slate-400">{data?.length || 0} risorse</p>
         </div>
         <button

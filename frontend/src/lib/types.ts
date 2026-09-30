@@ -237,31 +237,7 @@ export interface OpportunityDetail extends Opportunity {
   invoices: Invoice[];
 }
 
-export interface TimeEntry {
-  id: number;
-  resource_id: number;
-  resource_name: string;
-  project_id?: number | null;
-  period: string;
-  hours: number;
-  wbs: string;
-  type: string;
-  week_ending?: string | null;
-}
 
-export interface CostBalanceProposal {
-  contract_id: string;
-  contract_name: string;
-  months: string[];
-  current_revenues: number[];
-  current_costs: number[];
-  proposed_costs: number[];
-  ci_current: number;
-  ci_proposed: number;
-  ci_pct_current: number;
-  ci_pct_proposed: number;
-  reason: string;
-}
 
 // ---------- Cost Space bookato ----------
 export interface CostSpaceBucket {

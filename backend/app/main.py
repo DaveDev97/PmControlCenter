@@ -22,13 +22,13 @@ from app.api import (
     cost_space,
     crud,
     dashboard,
+    dd_repository,
     due_diligence,
     invoices,
     projects,
     reports,
     settings as settings_api,
-    time_reports,
-    time_upload,
+    team,
 )
 from app.core.config import settings
 from app.core.database import init_db
@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     watcher.cancel()
 
 
-app = FastAPI(title=settings.app_name, version="1.0.16", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.17", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,12 +69,12 @@ app.include_router(projects.router)
 app.include_router(due_diligence.router)
 app.include_router(cost_balancer.router)
 app.include_router(cost_space.router, prefix="/api/cost-space", tags=["cost-space"])
-app.include_router(time_reports.router)
-app.include_router(time_upload.router, prefix="/api/time-upload", tags=["time-upload"])
 app.include_router(invoices.router, prefix="/api/invoices", tags=["invoices"])
 app.include_router(reports.router)
 app.include_router(bd.router)
 app.include_router(cci.router)
+app.include_router(team.router)
+app.include_router(dd_repository.router)
 
 
 @app.get("/api/health", tags=["health"])

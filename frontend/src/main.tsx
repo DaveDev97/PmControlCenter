@@ -9,17 +9,16 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import Layout from "./components/Layout";
 import AccountDashboard from "./pages/AccountDashboard";
 import ContractDashboard from "./pages/ContractDashboard";
-import TeamDashboard from "./pages/TeamDashboard";
+import TeamResources from "./pages/TeamResources";
 import PersonDashboard from "./pages/PersonDashboard";
 import Contracts from "./pages/Contracts";
 import Opportunities from "./pages/Opportunities";
 import OpportunityDetail from "./pages/OpportunityDetail";
-import Resources from "./pages/Resources";
 import CostBalancer from "./pages/CostBalancer";
 import CostSpaceMonitor from "./pages/CostSpaceMonitor";
 import BDTracking from "./pages/BDTracking";
 import CCIMonitor from "./pages/CCIMonitor";
-import TimeReportGenerator from "./pages/TimeReportGenerator";
+import DueDiligenceRepo from "./pages/DueDiligenceRepo";
 import AIChatPage from "./pages/AIChatPage";
 import SetupWizard from "./pages/SetupWizard";
 import SettingsPage from "./pages/SettingsPage";
@@ -73,14 +72,14 @@ const router = createHashRouter([
       { path: "contracts/:id", element: <ContractDashboard /> },
       { path: "opportunities", element: <Opportunities /> },
       { path: "opportunities/:id", element: <OpportunityDetail /> },
-      { path: "team", element: <TeamDashboard /> },
-      { path: "resources", element: <Resources /> },
+      { path: "team", element: <TeamResources /> },
+      { path: "resources", element: <Navigate to="/team?tab=anagrafica" replace /> },
       { path: "person/:id", element: <PersonDashboard /> },
       { path: "cost-balancer", element: <CostBalancer /> },
       { path: "cost-space", element: <CostSpaceMonitor /> },
       { path: "bd", element: <BDTracking /> },
       { path: "cci", element: <CCIMonitor /> },
-      { path: "time-reports", element: <TimeReportGenerator /> },
+      { path: "due-diligence", element: <DueDiligenceRepo /> },
       { path: "ai-chat", element: <AIChatPage /> },
       { path: "settings", element: <SettingsPage /> },
     ],

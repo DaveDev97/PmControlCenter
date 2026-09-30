@@ -43,6 +43,7 @@ LOG_DIR = APP_DATA_DIR / "logs"
 # Fields persisted to (and reloaded from) settings.json.
 _PERSISTED_FIELDS = (
     "data_folder", "last_sync", "language", "theme", "auto_refresh_minutes", "chat_model",
+    "claude_path",
 )
 
 
@@ -62,6 +63,7 @@ class Settings(BaseSettings):
     theme: str = "light"  # light | dark | auto
     auto_refresh_minutes: int = 0  # 0 = disabled
     chat_model: str = ""  # Claude Code model alias: "" (default) | opus | sonnet | haiku
+    claude_path: str = ""  # optional explicit path to claude(.exe); auto-detected when empty
 
     # --- Static application constants (KPI logic) ---
     working_days_per_month: float = 20.0
@@ -95,7 +97,7 @@ class Settings(BaseSettings):
         instance = cls()
         if SETTINGS_FILE.exists():
             try:
-                saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8-sig"))  # tolerate a BOM
             except (json.JSONDecodeError, OSError):
                 saved = {}
             for field in _PERSISTED_FIELDS:

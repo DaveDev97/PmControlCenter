@@ -234,6 +234,17 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+          <div className="mt-3">
+            <label className="text-xs text-slate-500 dark:text-slate-400">
+              Percorso di claude.exe (vuoto = rilevamento automatico, anche dall'estensione VS Code)
+            </label>
+            <input
+              value={current.claude_path ?? ""}
+              onChange={(e) => set("claude_path", e.target.value)}
+              placeholder="C:\Users\…\claude.exe"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+            />
+          </div>
         </Section>
 
         {/* Updates */}

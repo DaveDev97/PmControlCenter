@@ -372,23 +372,6 @@ class DueDiligenceOut(ORMModel, DueDiligenceBase):
 
 
 # ---------- Time Entry ----------
-class TimeEntryBase(BaseModel):
-    resource_id: int
-    project_id: int | None = None
-    period: str
-    hours: float
-    wbs: str
-    type: str
-    week_ending: date | None = None
-
-
-class TimeEntryCreate(TimeEntryBase):
-    pass
-
-
-class TimeEntryOut(ORMModel, TimeEntryBase):
-    id: int
-    resource_name: str = ""  # Populated by service
 
 
 # ---------- Invoice Schemas ----------
@@ -470,26 +453,3 @@ class ProjectAllocationRow(BaseModel):
     utilization: float
     monthly_cost: float
     monthly_revenue: float
-
-
-class CostBalanceProposal(BaseModel):
-    """Cost optimization proposal for a contract"""
-
-    contract_id: str
-    contract_name: str
-    months: list[str]  # ["2026-09", "2026-10", ...]
-    current_costs: list[float]
-    proposed_costs: list[float]
-    current_revenues: list[float]
-    ci_current: float
-    ci_proposed: float
-    ci_pct_current: float
-    ci_pct_proposed: float
-    reason: str
-
-
-class TimeReportRequest(BaseModel):
-    """Request params for time report generation"""
-
-    period: str  # "2Q", "1Q", etc.
-    resource_ids: list[int] | None = None

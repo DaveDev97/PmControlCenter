@@ -97,7 +97,6 @@ frontend/src/
 │   ├── TeamDashboard.tsx        # Dashboard team
 │   ├── PersonDashboard.tsx      # Dashboard persona
 │   ├── OpportunityDetail.tsx    # Dettaglio opportunità + DD
-│   ├── TimeReportGenerator.tsx  # Gestione time reports
 │   ├── CostBalancer.tsx         # Ottimizzazione costi
 │   └── AIChatPage.tsx           # Chat AI (future)
 ├── components/
@@ -133,7 +132,6 @@ frontend/src/
 - Caricamento Excel → SQLite
 - Business logic (dashboard, KPI, aggregazioni)
 - Gestione overlay (modifiche utente)
-- Time reports generation/upload
 
 **Architettura:**
 
@@ -159,8 +157,6 @@ backend/app/
     ├── contracts.py           # CRUD contracts
     ├── opportunities.py       # CRUD opportunities
     ├── due_diligence.py       # DD endpoints
-    ├── time_reports.py        # Time reports
-    ├── time_upload.py         # Upload Excel ore
     └── settings.py            # Settings API
 ```
 

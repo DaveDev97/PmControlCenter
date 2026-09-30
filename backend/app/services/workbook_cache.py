@@ -29,6 +29,8 @@ class WorkbookSnapshot:
     path: Path
     signature: tuple[float, int]  # (mtime, size) of the file that was read
     sheets: dict[str, list[list]] = field(default_factory=dict)  # title -> rows (row/col 1 = index 0)
+    # Formulas of the sheets listed in FORMULA_SHEETS (same shape as ``sheets``).
+    formulas: dict[str, list[list]] = field(default_factory=dict)
 
     @property
     def sheetnames(self) -> list[str]:
@@ -54,6 +56,10 @@ class _SheetView:
 
 _snapshot: WorkbookSnapshot | None = None
 
+# Sheets whose formulas are also kept: the hours formulas of "Costi vs Forecast"
+# tell the share of time on the account ("*0.5") apart from absences ("-32").
+FORMULA_SHEETS = ("costi vs forecast",)
+
 
 def file_signature(path: Path) -> tuple[float, int]:
     st = path.stat()
@@ -71,7 +77,16 @@ def read_workbook(path: Path) -> WorkbookSnapshot:
         }
     finally:
         wb.close()  # read_only keeps the file handle open until closed
-    return WorkbookSnapshot(path=path, signature=sig, sheets=sheets)
+    formulas: dict[str, list[list]] = {}
+    wanted = [t for t in sheets if t.lower().strip() in FORMULA_SHEETS]
+    if wanted:
+        wf = openpyxl.load_workbook(path, read_only=True, data_only=False)
+        try:
+            for title in wanted:
+                formulas[title] = [list(r) for r in wf[title].iter_rows(min_row=1, min_col=1, values_only=True)]
+        finally:
+            wf.close()
+    return WorkbookSnapshot(path=path, signature=sig, sheets=sheets, formulas=formulas)
 
 
 def set_snapshot(snap: WorkbookSnapshot | None) -> None:
@@ -81,6 +96,10 @@ def set_snapshot(snap: WorkbookSnapshot | None) -> None:
 
 def snapshot() -> WorkbookSnapshot | None:
     return _snapshot
+
+
+def cached_formulas() -> dict[str, list[list]]:
+    return _snapshot.formulas if _snapshot else {}
 
 
 def cached_sheets() -> dict[str, list[list]]:

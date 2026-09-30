@@ -9,6 +9,7 @@ export interface AppSettings {
   theme: string;
   auto_refresh_minutes: number;
   chat_model: string;
+  claude_path: string;
   configured: boolean;
 }
 
@@ -20,8 +21,11 @@ export interface ChatStatus {
 
 export const chatApi = {
   status: () => api.get<ChatStatus>("/api/chat/status"),
-  send: (message: string) =>
-    api.post<{ reply: string; available: boolean; model?: string }>("/api/chat", { message }),
+  send: (message: string, history: { role: "user" | "assistant"; content: string }[] = []) =>
+    api.post<{ reply: string; available: boolean; model?: string; error?: boolean }>("/api/chat", {
+      message,
+      history,
+    }),
 };
 
 export interface FolderValidation {
