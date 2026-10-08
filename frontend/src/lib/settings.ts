@@ -19,6 +19,12 @@ export interface ChatStatus {
   model: string;
 }
 
+export interface ChatHistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
 export const chatApi = {
   status: () => api.get<ChatStatus>("/api/chat/status"),
   send: (message: string, history: { role: "user" | "assistant"; content: string }[] = []) =>
@@ -26,6 +32,9 @@ export const chatApi = {
       message,
       history,
     }),
+  history: () => api.get<{ turns: ChatHistoryTurn[]; data_as_of: string }>("/api/chat/history"),
+  clearHistory: () => api.del("/api/chat/history"),
+  briefing: () => api.get<{ briefing: string; data_as_of: string }>("/api/chat/briefing"),
 };
 
 export interface FolderValidation {
