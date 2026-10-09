@@ -111,60 +111,73 @@ def _parse_lc_map(rows: list[list]) -> dict[str, float]:
 # ── Pipeline sheets → Sales ───────────────────────────────────────────────────
 
 def _find_pipeline_rows(sheets: dict, fy_label: str) -> list[list[list]]:
-    """Find all sheets that could contain pipeline/opportunity data for a FY."""
+    """Find all Opp. FYxx sheets for the given FY label (e.g. 'Opp. FY27')."""
     y2 = fy_label[2:]       # "27"
     fy_full = "20" + y2     # "2027"
-    EXCLUDED = {"contratt", "costi", "sheet1", "forecast", "resource", "risorsa", "team"}
     result = []
     for title, rows in sheets.items():
         tl = title.lower().strip()
-        if any(ex in tl for ex in EXCLUDED):
-            continue
-        if f"fy{y2}" in tl or fy_full in tl:
+        # Match: "opp. fy27", "opp fy27", "opp.fy27", "pipeline fy27", "pipeline 2027"
+        if tl.startswith("opp") and (f"fy{y2}" in tl or fy_full in tl):
+            result.append(rows)
+        elif "pipeline" in tl and (f"fy{y2}" in tl or fy_full in tl):
             result.append(rows)
     return result
 
 
 def _parse_sales(sheets: dict, fy_label: str, fy_start: date, fy_end: date,
                  contract_filter: str | None) -> tuple[float, int, str | None]:
-    """Return (total_sales, count, warning_or_None) from pipeline sheets."""
+    """Return (total_sales, count, warning_or_None) from Opp. FYxx sheets.
+
+    Column names follow excel_reader._load_opportunities:
+    header detected by presence of 'Contract'; key cols: 'mms status',
+    'revenues', 'close date', 'contract'.
+    """
     sheets_rows = _find_pipeline_rows(sheets, fy_label)
     if not sheets_rows:
-        return 0.0, 0, f"Sheet pipeline {fy_label} non trovato"
+        return 0.0, 0, f"Sheet 'Opp. {fy_label}' non trovato"
 
     total, count = 0.0, 0
     for rows in sheets_rows:
         if not rows:
             continue
-        # Find header row
-        col_mms = col_date = col_amount = col_contract = -1
+        # Header row = first row containing "Contract" (exact, case-insensitive)
         header_ri = None
-        for ri, row in enumerate(rows[:15]):
-            for ci, v in enumerate(row):
-                if not isinstance(v, str):
-                    continue
-                vl = v.strip().lower()
-                if "mms" in vl:
-                    col_mms = ci
-                    header_ri = ri
-                elif "close" in vl and "date" in vl:
-                    col_date = ci
-                elif "amount" in vl or "importo" in vl or "valore" in vl:
-                    col_amount = ci
-                elif ("contract" in vl or "wbs" in vl) and col_contract == -1:
-                    col_contract = ci
-        if header_ri is None or col_mms == -1:
+        cols: dict[str, int] = {}
+        for ri, row in enumerate(rows[:10]):
+            labels = {(v.strip().lower() if isinstance(v, str) else ""): ci
+                      for ci, v in enumerate(row)}
+            if "contract" in labels:
+                header_ri = ri
+                cols = labels
+                break
+        if header_ri is None:
             continue
+
+        def _col(*names: str) -> int:
+            for n in names:
+                if n in cols:
+                    return cols[n]
+            return -1
+
+        col_mms = _col("mms status")
+        col_rev = _col("revenues", "amount", "importo", "valore", "estimated value")
+        col_date = _col("close date")
+        col_contract = _col("contract")
+
+        if col_mms == -1:
+            continue
+
         for row in rows[header_ri + 1:]:
             if not row or all(v is None for v in row):
                 continue
             mms = row[col_mms] if col_mms < len(row) else None
             if not isinstance(mms, str):
                 continue
-            mms_l = mms.strip().lower().replace(" ", "").replace("-", "").replace("_", "")
-            if "closewon" not in mms_l and not ("close" in mms_l and "won" in mms_l):
+            mms_clean = mms.strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+            if "closewon" not in mms_clean:
                 continue
-            # Close date filter
+            # Close date filter (only if column exists)
             if col_date >= 0 and col_date < len(row):
                 cd = row[col_date]
                 if isinstance(cd, datetime):
@@ -172,11 +185,11 @@ def _parse_sales(sheets: dict, fy_label: str, fy_start: date, fy_end: date,
                 if isinstance(cd, date) and not (fy_start <= cd <= fy_end):
                     continue
             # Contract filter
-            if contract_filter:
-                ct = row[col_contract] if col_contract >= 0 and col_contract < len(row) else None
+            if contract_filter and col_contract >= 0 and col_contract < len(row):
+                ct = row[col_contract]
                 if isinstance(ct, str) and contract_filter not in ct:
                     continue
-            amount = _num(row[col_amount]) if col_amount >= 0 and col_amount < len(row) else None
+            amount = _num(row[col_rev]) if col_rev >= 0 and col_rev < len(row) else None
             if amount and amount > 0:
                 total += amount
                 count += 1

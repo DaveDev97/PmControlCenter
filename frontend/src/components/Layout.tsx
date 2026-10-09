@@ -26,10 +26,10 @@ const nav = [
   { to: "/", labelKey: "nav.account", icon: LayoutDashboard, end: true },
   { to: "/opportunities", labelKey: "nav.opportunities", icon: Target },
   { to: "/team", labelKey: "nav.team", icon: Users },
-  { to: "/cost-balancer", labelKey: "nav.costBalancer", icon: TrendingUp },
   { to: "/cci", labelKey: "nav.cci", icon: Gauge },
   { to: "/bd", labelKey: "nav.bd", icon: Briefcase },
   { to: "/due-diligence", labelKey: "nav.dueDiligence", icon: ClipboardCheck },
+  { to: "/cost-balancer", labelKey: "nav.costBalancer", icon: TrendingUp },
 ];
 
 function NavItem({
@@ -208,7 +208,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className={`flex ${collapsed ? "flex-col items-center gap-2" : "items-center justify-between"}`}>
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.22</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.23</div>
             )}
 
             <div className={`flex gap-2 ${collapsed ? "flex-col" : ""}`}>
