@@ -81,7 +81,8 @@
       {
         "provider": "github",
         "owner": "DaveDev97",
-        "repo": "PmControlCenter"
+        "repo": "PmControlCenter",
+        "releaseType": "release"
       }
     ]
   }
