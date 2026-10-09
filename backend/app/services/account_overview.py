@@ -86,25 +86,24 @@ def _try_parse_month(v) -> str | None:
 # ── LC map from "Costi vs Forecast" ──────────────────────────────────────────
 
 def _parse_lc_map(rows: list[list]) -> dict[str, float]:
-    """Resource name (col A) → LC hourly rate (col C). Skips headers/labels."""
+    """Resource name → LC hourly rate, using _team_layout to find columns."""
+    layout = _team_layout(rows)
+    if layout is None:
+        return {}
+    hdr, res_col, lc_col, _charg_col, _cols = layout
+    if lc_col is None:
+        return {}
     lc_map: dict[str, float] = {}
-    SKIP_LABELS = {"risorse", "resources", "altre spese", "other costs", "totale",
-                   "total", "costo", "cost", "descrizione", "description", "nome",
-                   "spazio", "spazi", "sum", "fy", "forecast", "actual"}
-    for row in rows:
-        if len(row) < 3:
+    for row in rows[hdr + 1:]:
+        if not row:
             continue
-        name = row[0]
-        lc = row[2]
+        name = row[res_col] if res_col < len(row) else None
+        lc = row[lc_col] if lc_col < len(row) else None
         if not isinstance(name, str) or not name.strip():
             continue
-        name_clean = name.strip()
-        if name_clean.lower() in SKIP_LABELS or name_clean.startswith("#") or name_clean.startswith("="):
-            continue
-        # Only accept LC if it looks like an hourly rate (positive float)
         lc_val = _num(lc)
         if lc_val and lc_val > 0:
-            lc_map[name_clean] = lc_val
+            lc_map[name.strip()] = lc_val
     return lc_map
 
 
@@ -218,17 +217,31 @@ def _parse_team_hours(
     if layout is None:
         return {}, ["Struttura del foglio 'Costi vs Forecast' non riconosciuta — costi impostati a zero"]
 
-    hdr, res_col, _lc_col, _charg_col, cols = layout
+    hdr, res_col, lc_col, _charg_col, cols = layout
     mk_set = set(fy_months(fy_start, fy_end))
 
     # Filtra solo le colonne nel FY richiesto
     fy_cols = [(ci, mk) for ci, mk, _mh in cols if mk in mk_set]
     if not fy_cols:
-        return {}, [f"Nessun mese del FY trovato nel foglio 'Costi vs Forecast'"]
+        return {}, ["Nessun mese del FY trovato nel foglio 'Costi vs Forecast'"]
 
-    SKIP = {"totale", "total", "risorse", "resources", "team", "subtotale",
-            "subtotal", "riepilogo", "summary", "nome", "name", "payroll",
-            "not payroll", "notpayroll", "capex", "totale risorse"}
+    # Costruiamo la LC map direttamente dal layout (più affidabile di quella esterna)
+    # Una riga è una risorsa se e solo se ha LC > 0 nella colonna lc_col.
+    # Righe senza LC (WBS, totali, nomi progetto) vengono ignorate silenziosamente.
+    internal_lc: dict[str, float] = {}
+    if lc_col is not None:
+        for row in costi_rows[hdr + 1:]:
+            if not row:
+                continue
+            name = row[res_col] if res_col < len(row) else None
+            lc = row[lc_col] if lc_col < len(row) else None
+            lc_val = _num(lc)
+            if isinstance(name, str) and name.strip() and lc_val and lc_val > 0:
+                internal_lc[name.strip()] = lc_val
+
+    # Merge: mappa interna ha precedenza (è quella più accurata)
+    merged_lc = {**lc_map, **internal_lc}
+
     result: dict[str, dict[str, float]] = {}
     missing_lc: set[str] = set()
 
@@ -239,10 +252,11 @@ def _parse_team_hours(
         if not isinstance(name, str) or not name.strip():
             continue
         name = name.strip()
-        if name.lower() in SKIP or name.startswith("#") or name.startswith("="):
+
+        # Risorsa reale = ha LC > 0. Righe senza LC sono etichette/totali → skip.
+        if name not in merged_lc:
             continue
-        if name not in lc_map:
-            missing_lc.add(name)
+
         hours: dict[str, float] = {}
         for ci, mk in fy_cols:
             v = _num(row[ci]) if ci < len(row) else None
@@ -251,13 +265,8 @@ def _parse_team_hours(
         if hours:
             result[name] = hours
 
-    warnings = []
-    if missing_lc:
-        warnings.append(
-            f"LC non trovato per: {', '.join(sorted(missing_lc))}. "
-            "I costi potrebbero essere sottostimati."
-        )
-    return result, warnings
+    # Nessun warning "LC non trovato": se non ha LC non è una risorsa.
+    return result, []
 
 
 # ── Main builder ─────────────────────────────────────────────────────────────

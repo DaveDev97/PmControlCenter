@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     watcher.cancel()
 
 
-app = FastAPI(title=settings.app_name, version="1.0.23", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.24", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
