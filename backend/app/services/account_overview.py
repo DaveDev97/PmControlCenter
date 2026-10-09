@@ -16,6 +16,7 @@ from datetime import date, datetime
 
 from app.services.workbook_cache import cached_sheets, find_sheet
 from app.services.cci import _parse_contracts
+from app.services.team_allocation import _layout as _team_layout
 
 _MONTHS_IT = ["", "Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"]
 _MONTHS_EN_TO_NUM = {
@@ -182,15 +183,7 @@ def _parse_sales(sheets: dict, fy_label: str, fy_start: date, fy_end: date,
     return round(total, 2), count, None
 
 
-# ── Team & Resources → hours per resource per month ──────────────────────────
-
-def _find_team_sheet(sheets: dict) -> list[list] | None:
-    for title, rows in sheets.items():
-        tl = title.lower().strip()
-        if ("team" in tl or "resource" in tl or "risorsa" in tl) and "contratt" not in tl:
-            return rows
-    return None
-
+# ── Costi vs Forecast → ore per risorsa per mese ─────────────────────────────
 
 def _parse_team_hours(
     sheets: dict,
@@ -200,50 +193,45 @@ def _parse_team_hours(
     today: date,
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
     """
-    Parse Team & Resources sheet.
+    Legge le ore per risorsa per mese dal foglio 'Costi vs Forecast' usando la
+    stessa struttura già parsata dal Team Dashboard (_team_layout).
     Returns ({resource_name: {month_key: hours}}, warnings).
     """
-    rows = _find_team_sheet(sheets)
-    if rows is None:
-        return {}, ["Sheet 'Team & Resources' non trovato — costi impostati a zero"]
+    costi_rows = find_sheet(sheets, lambda t: "costi" in t and "forecast" in t)
+    if not costi_rows:
+        return {}, ["Foglio 'Costi vs Forecast' non trovato — costi impostati a zero"]
 
-    # Find header row: has ≥ 2 month-parseable columns in the FY
-    header_ri = -1
-    month_cols: list[tuple[int, str]] = []
-    fy_mk_set = set(fy_months(fy_start, fy_end))
+    layout = _team_layout(costi_rows)
+    if layout is None:
+        return {}, ["Struttura del foglio 'Costi vs Forecast' non riconosciuta — costi impostati a zero"]
 
-    for ri, row in enumerate(rows[:15]):
-        found = []
-        for ci, v in enumerate(row):
-            mk = _try_parse_month(v)
-            if mk and mk in fy_mk_set:
-                found.append((ci, mk))
-        if len(found) >= 2:
-            header_ri = ri
-            month_cols = found
-            break
+    hdr, res_col, _lc_col, _charg_col, cols = layout
+    mk_set = set(fy_months(fy_start, fy_end))
 
-    if not month_cols:
-        return {}, ["Nessuna colonna mese FY trovata nel foglio Team & Resources"]
+    # Filtra solo le colonne nel FY richiesto
+    fy_cols = [(ci, mk) for ci, mk, _mh in cols if mk in mk_set]
+    if not fy_cols:
+        return {}, [f"Nessun mese del FY trovato nel foglio 'Costi vs Forecast'"]
 
     SKIP = {"totale", "total", "risorse", "resources", "team", "subtotale",
-            "subtotal", "riepilogo", "summary", "nome", "name"}
+            "subtotal", "riepilogo", "summary", "nome", "name", "payroll",
+            "not payroll", "notpayroll", "capex", "totale risorse"}
     result: dict[str, dict[str, float]] = {}
     missing_lc: set[str] = set()
 
-    for row in rows[header_ri + 1:]:
+    for row in costi_rows[hdr + 1:]:
         if not row:
             continue
-        name = row[0]
+        name = row[res_col] if res_col < len(row) else None
         if not isinstance(name, str) or not name.strip():
             continue
         name = name.strip()
-        if name.lower() in SKIP or name.startswith("#"):
+        if name.lower() in SKIP or name.startswith("#") or name.startswith("="):
             continue
         if name not in lc_map:
             missing_lc.add(name)
         hours: dict[str, float] = {}
-        for ci, mk in month_cols:
+        for ci, mk in fy_cols:
             v = _num(row[ci]) if ci < len(row) else None
             if v and v > 0:
                 hours[mk] = v
@@ -253,7 +241,7 @@ def _parse_team_hours(
     warnings = []
     if missing_lc:
         warnings.append(
-            f"LC non trovato per le seguenti risorse: {', '.join(sorted(missing_lc))}. "
+            f"LC non trovato per: {', '.join(sorted(missing_lc))}. "
             "I costi potrebbero essere sottostimati."
         )
     return result, warnings
