@@ -283,7 +283,7 @@ export default function AccountOverview() {
   const contracts = data?.contracts_available ?? [];
 
   // Determine CCI accent for card 4
-  const cci = data?.costi_totali_fy.cci_proiettato ?? null;
+  const cci = data?.costi_totali_fy?.cci_proiettato ?? null;
   const cciAccent: "green" | "red" | "yellow" | "neutral" =
     cci === null ? "neutral" : cci >= 1.2 ? "green" : cci >= 1.0 ? "yellow" : "red";
 
@@ -364,10 +364,17 @@ export default function AccountOverview() {
           </div>
         ) : null}
 
-        {/* Errore ──────────────────────────────────────────────────────────── */}
+        {/* Errore di rete ──────────────────────────────────────────────────── */}
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300">
             Errore nel caricamento dei dati: {error}
+          </div>
+        )}
+
+        {/* Dati non disponibili (workbook non ancora caricato) ─────────────── */}
+        {!loading && !error && data && !data.available && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
+            {data.error ?? "Dati non disponibili. Configura il file Excel nelle Impostazioni."}
           </div>
         )}
 
@@ -394,9 +401,9 @@ export default function AccountOverview() {
               {/* Revenue FY */}
               <KpiCard
                 title="Revenue FY"
-                main={fmtEurIT(data.revenue.amount)}
+                main={fmtEurIT(data.revenue?.amount ?? 0)}
                 sub={
-                  data.revenue.coverage_pct !== null
+                  (data.revenue?.coverage_pct ?? null) !== null
                     ? `Coverage: ${fmtPct(data.revenue.coverage_pct)}`
                     : "Coverage: n/d"
                 }
@@ -406,16 +413,16 @@ export default function AccountOverview() {
               {/* Costi ad oggi */}
               <KpiCard
                 title="Costi sostenuti ad oggi"
-                main={fmtEurIT(data.costi_ad_oggi.amount)}
+                main={fmtEurIT(data.costi_ad_oggi?.amount ?? 0)}
                 sub={
-                  data.costi_ad_oggi.pct_spazio_costi !== null
-                    ? `${fmtPct(data.costi_ad_oggi.pct_spazio_costi)} dello spazio costi FY`
+                  (data.costi_ad_oggi?.pct_spazio_costi ?? null) !== null
+                    ? `${fmtPct(data.costi_ad_oggi!.pct_spazio_costi)} dello spazio costi FY`
                     : undefined
                 }
                 accent={
-                  (data.costi_ad_oggi.pct_spazio_costi ?? 0) > 100
+                  (data.costi_ad_oggi?.pct_spazio_costi ?? 0) > 100
                     ? "red"
-                    : (data.costi_ad_oggi.pct_spazio_costi ?? 0) > 80
+                    : (data.costi_ad_oggi?.pct_spazio_costi ?? 0) > 80
                     ? "yellow"
                     : "neutral"
                 }
@@ -424,12 +431,7 @@ export default function AccountOverview() {
               {/* Costi totali FY */}
               <KpiCard
                 title="Costi totali FY (proiezione)"
-                main={fmtEurIT(data.costi_totali_fy.amount)}
-                sub={
-                  data.costi_totali_fy.cci_proiettato !== null ? (
-                    undefined
-                  ) : undefined
-                }
+                main={fmtEurIT(data.costi_totali_fy?.amount ?? 0)}
                 accent={cciAccent}
               />
             </>
@@ -437,23 +439,23 @@ export default function AccountOverview() {
         </div>
 
         {/* CCI proiettato badge (fuori dalla card per visibilità) */}
-        {!loading && data?.costi_totali_fy.cci_proiettato !== null && (
+        {!loading && (data?.costi_totali_fy?.cci_proiettato ?? null) !== null && (
           <div className="mb-5 flex items-center gap-2">
-            {(data!.costi_totali_fy.cci_proiettato ?? 0) >= 1.2 ? (
+            {(data?.costi_totali_fy?.cci_proiettato ?? 0) >= 1.2 ? (
               <TrendingUp size={14} className="text-emerald-600" />
             ) : (
               <TrendingDown size={14} className="text-red-600" />
             )}
             <span
               className={`text-sm font-semibold ${
-                (data!.costi_totali_fy.cci_proiettato ?? 0) >= 1.2
+                (data?.costi_totali_fy?.cci_proiettato ?? 0) >= 1.2
                   ? "text-emerald-700 dark:text-emerald-400"
-                  : (data!.costi_totali_fy.cci_proiettato ?? 0) >= 1.0
+                  : (data?.costi_totali_fy?.cci_proiettato ?? 0) >= 1.0
                   ? "text-amber-700 dark:text-amber-400"
                   : "text-red-700 dark:text-red-400"
               }`}
             >
-              CCI proiettato: {data!.costi_totali_fy.cci_proiettato?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) ?? "—"}
+              CCI proiettato: {data?.costi_totali_fy?.cci_proiettato?.toLocaleString("it-IT", { minimumFractionDigits: 2 }) ?? "—"}
             </span>
             <span className="text-xs text-slate-400">(target ≥ 1.35)</span>
           </div>
