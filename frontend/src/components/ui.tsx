@@ -43,7 +43,6 @@ const KPI_TOOLTIPS: Record<string, string> = {
 
   // Contract Dashboard KPIs
   "Revenues": "Ricavi totali del contratto per il periodo.",
-  "Revenue": "Ricavi totali del contratto per il periodo.",
   "Total Costs": "Costi totali del contratto (Payroll + Not Payroll + Capex).",
   "Costs": "Costi totali del contratto per il periodo.",
   "CI": "Contribution Income del contratto (Revenue - Costs).",
