@@ -10,6 +10,7 @@ import { Card, KpiCard, StatusBadge, Loading, ErrorBox } from "../components/ui"
 import { RevCostChart, PipelineBars } from "../components/charts";
 import { fmtEur, fmtPct } from "../lib/format";
 import PptTemplatePicker from "../components/PptTemplatePicker";
+import AccountOverview from "../components/AccountOverview";
 
 export default function AccountDashboard() {
   const navigate = useNavigate();
@@ -193,6 +194,9 @@ export default function AccountDashboard() {
 
   return (
     <>
+      {/* Account Overview — sezione finanziaria in cima, non toccare il contenuto sotto */}
+      <AccountOverview />
+
       {/* PPT Preview Modal */}
       {showPptPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
