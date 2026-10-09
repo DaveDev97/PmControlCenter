@@ -11,11 +11,9 @@ import AccountDashboard from "./pages/AccountDashboard";
 import ContractDashboard from "./pages/ContractDashboard";
 import TeamResources from "./pages/TeamResources";
 import PersonDashboard from "./pages/PersonDashboard";
-import Contracts from "./pages/Contracts";
 import Opportunities from "./pages/Opportunities";
 import OpportunityDetail from "./pages/OpportunityDetail";
 import CostBalancer from "./pages/CostBalancer";
-import CostSpaceMonitor from "./pages/CostSpaceMonitor";
 import BDTracking from "./pages/BDTracking";
 import CCIMonitor from "./pages/CCIMonitor";
 import DueDiligenceRepo from "./pages/DueDiligenceRepo";
@@ -68,7 +66,7 @@ const router = createHashRouter([
     element: <ProtectedLayout />,
     children: [
       { index: true, element: <AccountDashboard /> },
-      { path: "contracts", element: <Contracts /> },
+      { path: "contracts", element: <Navigate to="/cost-balancer" replace /> },
       { path: "contracts/:id", element: <ContractDashboard /> },
       { path: "opportunities", element: <Opportunities /> },
       { path: "opportunities/:id", element: <OpportunityDetail /> },
@@ -76,7 +74,7 @@ const router = createHashRouter([
       { path: "resources", element: <Navigate to="/team?tab=anagrafica" replace /> },
       { path: "person/:id", element: <PersonDashboard /> },
       { path: "cost-balancer", element: <CostBalancer /> },
-      { path: "cost-space", element: <CostSpaceMonitor /> },
+      { path: "cost-space", element: <Navigate to="/cost-balancer" replace /> },
       { path: "bd", element: <BDTracking /> },
       { path: "cci", element: <CCIMonitor /> },
       { path: "due-diligence", element: <DueDiligenceRepo /> },

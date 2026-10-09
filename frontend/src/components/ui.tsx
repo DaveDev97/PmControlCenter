@@ -29,7 +29,13 @@ export function Card({
 }
 
 const KPI_TOOLTIPS: Record<string, string> = {
-  // Account Dashboard KPIs
+  // Account Dashboard KPIs (nuovi)
+  "Sales": "Valore totale delle opportunità bookate (CloseWon / 3B) nel FY selezionato, indipendentemente dal riconoscimento dei ricavi.",
+  "Revenue": "Ricavi riconosciuti nei mesi del FY selezionato (competenza economica effettiva).",
+  "Costi sostenuti": "Costi complessivi sostenuti dall'inizio del FY fino a oggi (solo mesi consuntivati).",
+  "CI%": "Contribution Income come percentuale del Revenue. Formula: (Revenue − Costi) / Revenue × 100",
+
+  // Account Dashboard KPIs (legacy)
   "Revenues YTD": "Somma dei ricavi di tutti i contratti (consuntivo + forecast) per il periodo selezionato.",
   "Costs YTD": "Somma dei costi del personale (Payroll + Not Payroll + Capex) per il periodo selezionato.",
   "Contribution Income": "Revenue - Total Costs. Rappresenta il margine lordo prima dei costi generali.",

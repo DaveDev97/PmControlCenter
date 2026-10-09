@@ -46,31 +46,48 @@ async def _load_alloc_context(session: AsyncSession):
     return resources, allocations, financials, res_by_id
 
 
+def _fy_date_range(fy: str) -> tuple[date, date]:
+    """Accenture FY date range: FY2027 = 1 Sep 2026 – 31 Aug 2027."""
+    year = int(fy)
+    from datetime import date
+    return date(year - 1, 9, 1), date(year, 8, 31)
+
+
+def _fy_label(fy: str) -> str:
+    """Convert year string '2027' → opportunity fiscal_year label 'FY27'."""
+    return f"FY{fy[2:]}"
+
+
 def _filter_financials(
     financials: list[Financial],
     from_month: str | None = None,
     to_month: str | None = None,
     fy: str | None = None,
 ) -> list[Financial]:
-    """Filter financials by date range or fiscal year."""
+    """Filter financials by date range or Accenture fiscal year (Sep–Aug)."""
     if not (from_month or to_month or fy):
         return financials
 
+    from datetime import date
+
+    fy_start: date | None = None
+    fy_end: date | None = None
+    if fy:
+        fy_start, fy_end = _fy_date_range(fy)
+
     filtered = []
     for f in financials:
-        month_key = f.month.strftime("%Y-%m")
+        month_str = f.month.strftime("%Y-%m")
 
-        # FY filter (priority over from/to)
-        if fy:
-            year = int(fy)
-            # Simple calendar year filter for MVP
-            if f.month.year != year:
+        # Accenture FY filter (Sep–Aug)
+        if fy_start and fy_end:
+            if not (fy_start <= f.month <= fy_end):
                 continue
 
         # Date range filter
-        if from_month and month_key < from_month:
+        if from_month and month_str < from_month:
             continue
-        if to_month and month_key > to_month:
+        if to_month and month_str > to_month:
             continue
 
         filtered.append(f)
@@ -124,6 +141,10 @@ async def build_account(
     to_month: str | None = None,
     fy: str | None = None,
 ) -> AccountDashboard:
+    from datetime import date
+
+    today = date.today()
+
     q = select(Contract).options(
         selectinload(Contract.financials), selectinload(Contract.client)
     )
@@ -136,9 +157,16 @@ async def build_account(
         client = await session.get(Client, client_id)
         client_name = client.name if client else f"Client {client_id}"
 
+    # FY date range for costs-to-date and opportunity Sales filter.
+    fy_start: date | None = None
+    fy_end: date | None = None
+    if fy:
+        fy_start, fy_end = _fy_date_range(fy)
+
     # Aggregate monthly across contracts.
     monthly_map: dict[str, dict] = {}
     tot_rev = tot_cost = 0.0
+    costi_a_oggi = 0.0  # actual costs incurred up to today within FY
     tot_fc_rev = tot_fc_cost = 0.0
     contract_rows: list[ContractKpiRow] = []
 
@@ -150,6 +178,10 @@ async def build_account(
         tot_cost += totals["costs"]
         tot_fc_rev += totals["forecast_revenues"]
         tot_fc_cost += totals["forecast_costs"]
+        # Costs actually incurred: only months up to today
+        costi_a_oggi += sum(
+            f.total_costs_actual for f in filtered_financials if f.month <= today
+        )
         contract_rows.append(
             ContractKpiRow(
                 id=c.id,
@@ -187,38 +219,48 @@ async def build_account(
 
     ci = tot_rev - tot_cost
     ci_pct = ci / tot_rev if tot_rev else 0.0
-    # Forecast accuracy: how close forecast revenue is to actual (where both exist).
-    fc_accuracy = 1 - abs(tot_fc_rev - tot_rev) / tot_rev if tot_rev else 0.0
 
-    kpis = [
-        KpiValue(label="Revenues YTD", value=round(tot_rev, 2), unit="EUR"),
-        KpiValue(label="Costs YTD", value=round(tot_cost, 2), unit="EUR"),
-        KpiValue(
-            label="Contribution Income",
-            value=round(ci, 2),
-            unit="EUR",
-            status=calc.ci_status(ci_pct),
-        ),
-        KpiValue(
-            label="CI Margin",
-            value=round(ci_pct, 4),
-            unit="PCT",
-            status=calc.ci_status(ci_pct),
-        ),
-    ]
-
-    # Pipeline by quarter + stage.
+    # Pipeline by quarter + stage + Sales KPI (booked opps in the selected FY).
     oq = select(Opportunity)
     if client_id is not None:
         contract_ids = [c.id for c in contracts]
         oq = oq.where(Opportunity.contract_id.in_(contract_ids))
     opps = (await session.scalars(oq)).all()
+
+    # Sales = total estimated_value of booked opportunities in the selected FY.
+    # Booked = stage CloseWon/3B or mms_status_code 3B/close-won.
+    BOOKED_STAGES = {"CloseWon", "3B"}
+    BOOKED_MMS = {"3B", "close-won", "CloseWon"}
+    fy_label = _fy_label(fy) if fy else None
+    sales = 0.0
     pipe_map: dict[tuple[str, str], list[float]] = defaultdict(list)
     for o in opps:
+        is_booked = (o.stage in BOOKED_STAGES) or (o.mms_status_code in BOOKED_MMS)
+        if is_booked:
+            # Match FY by stored fiscal_year label or by close_date within FY range
+            opp_in_fy = (
+                (fy_label and o.fiscal_year == fy_label)
+                or (fy_start and fy_end and o.close_date and fy_start <= o.close_date <= fy_end)
+                or (not fy)  # no FY filter → count all booked
+            )
+            if opp_in_fy:
+                sales += o.estimated_value or 0.0
         pipe_map[(o.quarter or "N/A", o.stage or "Lead")].append(o.estimated_value or 0.0)
     pipeline = [
         PipelineStage(quarter=q, stage=s, value=round(sum(v), 2), count=len(v))
         for (q, s), v in sorted(pipe_map.items())
+    ]
+
+    kpis = [
+        KpiValue(label="Sales", value=round(sales, 2), unit="EUR"),
+        KpiValue(label="Revenue", value=round(tot_rev, 2), unit="EUR"),
+        KpiValue(label="Costi sostenuti", value=round(costi_a_oggi, 2), unit="EUR"),
+        KpiValue(
+            label="CI%",
+            value=round(ci_pct, 4),
+            unit="PCT",
+            status=calc.ci_status(ci_pct),
+        ),
     ]
 
     return AccountDashboard(

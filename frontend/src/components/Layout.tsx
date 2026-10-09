@@ -3,9 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  BarChart3,
   LayoutDashboard,
-  FileText,
   Users,
   Target,
   TrendingUp,
@@ -26,11 +24,9 @@ import { settingsApi, updates } from "../lib/settings";
 
 const nav = [
   { to: "/", labelKey: "nav.account", icon: LayoutDashboard, end: true },
-  { to: "/contracts", labelKey: "nav.contracts", icon: FileText },
   { to: "/opportunities", labelKey: "nav.opportunities", icon: Target },
   { to: "/team", labelKey: "nav.team", icon: Users },
   { to: "/cost-balancer", labelKey: "nav.costBalancer", icon: TrendingUp },
-  { to: "/cost-space", labelKey: "nav.costSpace", icon: BarChart3 },
   { to: "/cci", labelKey: "nav.cci", icon: Gauge },
   { to: "/bd", labelKey: "nav.bd", icon: Briefcase },
   { to: "/due-diligence", labelKey: "nav.dueDiligence", icon: ClipboardCheck },
@@ -212,7 +208,7 @@ export default function Layout() {
         <div className="border-t border-slate-100 p-3 dark:border-slate-700">
           <div className={`flex ${collapsed ? "flex-col items-center gap-2" : "items-center justify-between"}`}>
             {!collapsed && (
-              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.18</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">v1.0.19</div>
             )}
 
             <div className={`flex gap-2 ${collapsed ? "flex-col" : ""}`}>

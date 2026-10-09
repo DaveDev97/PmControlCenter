@@ -15,9 +15,10 @@ export default function AccountDashboard() {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [selectedFY, setSelectedFY] = useState<string>("2026");
+  // Accenture FY: Sep–Aug. FY2027 = Sep 2026 – Aug 2027. Default to current FY.
+  const [selectedFY, setSelectedFY] = useState<string>("2027");
   const [compareFY, setCompareFY] = useState(false);
-  const [filtersActive, setFiltersActive] = useState(false);
+  const [filtersActive, setFiltersActive] = useState(true);
   const [genPpt, setGenPpt] = useState(false);
   const [showPptPreview, setShowPptPreview] = useState(false);
   const [pptPlan, setPptPlan] = useState<string>("");
@@ -142,13 +143,13 @@ export default function AccountDashboard() {
 
       <select
         value={selectedFY}
-        onChange={(e) => setSelectedFY(e.target.value)}
+        onChange={(e) => { setSelectedFY(e.target.value); setFiltersActive(true); }}
         className="rounded border border-slate-300 bg-white dark:bg-slate-700 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600 px-2 py-1 text-xs"
       >
-        <option  value="2024" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY 2024</option>
-        <option  value="2025" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY 2025</option>
-        <option  value="2026" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY 2026</option>
-        <option  value="2027" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY 2027</option>
+        <option value="2024" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY24 (Set 23 – Ago 24)</option>
+        <option value="2025" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY25 (Set 24 – Ago 25)</option>
+        <option value="2026" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY26 (Set 25 – Ago 26)</option>
+        <option value="2027" className="text-slate-800 dark:text-white bg-white dark:bg-slate-700">FY27 (Set 26 – Ago 27)</option>
       </select>
 
       <button
@@ -297,10 +298,13 @@ export default function AccountDashboard() {
             <div className="rounded-lg bg-brand-100 px-4 py-2 text-right">
             <div className="text-xs font-medium text-brand-700">Fiscal Year</div>
             <div className="text-2xl font-bold text-brand-800">
-              FY {selectedFY}
+              FY{String(selectedFY).slice(2)}
               {filtersActive && compareFY && (
-                <span className="ml-2 text-sm text-amber-700">vs FY {parseInt(selectedFY) - 1}</span>
+                <span className="ml-2 text-sm text-amber-700">vs FY{String(parseInt(selectedFY) - 1).slice(2)}</span>
               )}
+            </div>
+            <div className="mt-0.5 text-xs text-brand-600">
+              Set {String(parseInt(selectedFY) - 1).slice(2)} – Ago {String(selectedFY).slice(2)}
             </div>
             {filtersActive && startDate && (
               <div className="mt-1 text-xs text-brand-600">
